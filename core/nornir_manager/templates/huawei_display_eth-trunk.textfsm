@@ -1,0 +1,15 @@
+Value Required ETHTRUNK (Eth-Trunk\d+)
+Value List INTERFACE (\S+)
+
+Start
+  ^${ETHTRUNK}'s state information is: -> Find_Interfaces
+
+Find_Interfaces
+  ^ActorPortName -> Interface_Lines
+
+Interface_Lines
+  ^${INTERFACE}\s+Selected -> Interface_Lines
+  ^Partner: -> Record Start
+  ^${ETHTRUNK}'s state information is: -> Record Start
+
+EOF

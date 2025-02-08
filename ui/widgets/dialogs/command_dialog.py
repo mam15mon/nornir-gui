@@ -172,9 +172,13 @@ class CommandDialog(QDialog):
                 expect_item = self.command_table.item(row, 1)
                 if cmd_item and cmd_item.text().strip():
                     cmd = cmd_item.text().strip()
-                    # 如果没有指定期望响应,使用默认的提示符匹配
-                    expect = expect_item.text().strip() if expect_item and expect_item.text().strip() else r"[#>]"
-                    commands.append(f"{cmd}|{expect}")
+                    if self.use_timing_check.isChecked():
+                        # timing模式下直接使用命令
+                        commands.append(cmd)
+                    else:
+                        # 非timing模式使用命令|期望值格式
+                        expect = expect_item.text().strip() if expect_item and expect_item.text().strip() else r"[#>]"
+                        commands.append(f"{cmd}|{expect}")
             self.command = "\n".join(commands)
             self.command_mode = "multiline"
         else:

@@ -124,28 +124,20 @@ class CommandSender(QObject):
                     if not line:
                         continue
                         
-                    # 支持命令和期望响应的分隔
-                    parts = line.split('|', 1)
-                    cmd = parts[0].strip()
-                    
-                    if len(parts) > 1:
-                        expect = parts[1].strip()
-                        # 非timing模式时，需要使用 [cmd, expect] 格式
-                        if not use_timing:
-                            command_list.append([cmd, expect])
-                        else:
-                            command_list.append(cmd)
+                    if use_timing:
+                        # timing模式下直接使用命令
+                        command_list.append(line)
                     else:
-                        if not use_timing:
-                            # 非timing模式下使用默认期望响应
-                            command_list.append([cmd, r"[#>]"])
-                        else:
-                            command_list.append(cmd)
+                        # 非timing模式需要处理期望响应
+                        parts = line.split('|', 1)
+                        cmd = parts[0].strip()
+                        expect = parts[1].strip() if len(parts) > 1 else r"[#>]"
+                        command_list.append([cmd, expect])
                 
                 logger.debug(f"处理后的命令列表: {command_list}")
                 
                 try:
-                    # 直接传入命令列表，不要包装成 [cmd, expect] 的形式
+                    # 根据timing模式决定如何传递命令
                     output = task.run(
                         task=netmiko_multiline,
                         commands=command_list,

@@ -1,77 +1,84 @@
-import sys
-import os
-import logging
-from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QIcon
-from ui.main_window import MainWindow
+# 标准库导入
 import locale
+import logging
+import sys
+from pathlib import Path
+
+# 第三方库导入
+try:
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QIcon
+except ImportError as e:
+    logging.error("无法导入 PySide6: %s", str(e))
+    sys.exit(1)
+
+# 本地导入
+from ui.main_window import MainWindow
 from core.utils.logger import setup_logging
 from core.db.database import Database
 
-# 添加这一行
+# 设置日志记录器
 logger = logging.getLogger(__name__)
+setup_logging()
 
-# 设置默认编码
-if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+def init_locale() -> None:
+    """初始化本地化设置"""
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
-        sys.stderr.reconfigure(encoding='utf-8')
-    except Exception as e:
-        logger.warning(f"编码重配置失败: {str(e)}")
-else:
-    try:
-        # 处理NoneType情况和旧版本Python
-        if sys.stdout and sys.stdout.encoding != 'utf-8':
-            import codecs
-            sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
-            sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
-    except (AttributeError, Exception) as e:
-        logger.error(f"编码设置失败: {str(e)}", exc_info=True)
+        locale.setlocale(locale.LC_ALL, '')
+    except locale.Error as e:
+        logger.error("设置本地化失败: %s", str(e))
 
-# 设置区域
-try:
-    locale.setlocale(locale.LC_ALL, 'zh_CN.UTF-8')
-except locale.Error:
+def init_database() -> None:
+    """初始化数据库"""
     try:
-        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-    except locale.Error:
-        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+        Database()
+    except (ImportError, RuntimeError) as e:
+        logger.error("数据库初始化失败: %s", str(e))
 
-def main():
-    """程序入口"""
+def get_app_icon_path() -> Path:
+    """获取应用图标路径"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后的路径
+        base_path = Path(sys._MEIPASS)  # pylint: disable=protected-access
+    else:
+        # 开发环境路径
+        base_path = Path(__file__).parent
+
+    return base_path / 'assets' / 'icon.ico'
+
+def init_app() -> QApplication:
+    """初始化应用程序"""
+    # 创建应用程序实例
+    app = QApplication(sys.argv)
+    
+    logger.info("正在启动应用程序...")
+    logger.info("Python 版本: %s", sys.version)
+
+    # 设置应用程序图标
     try:
-        # 检查日志目录
-        log_dir = os.path.abspath('logs')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir, mode=0o777)
-        
-        # 初始化日志系统
-        setup_logging()
-        logger = logging.getLogger(__name__)
-        
-        # 记录基本系统信息
-        logger.info(f"操作系统: {os.name}")
-        logger.info(f"当前工作目录: {os.getcwd()}")
-        
-        # 确保数据库初始化
-        db = Database()
-        db.ensure_initialized()
-        
-        app = QApplication(sys.argv)
-        
-        # 设置应用图标
-        icon_path = os.path.join('assets', 'icon.ico')
-        if hasattr(sys, '_MEIPASS'):  # 如果是打包后的exe
-            icon_path = os.path.join(sys._MEIPASS, 'assets', 'icon.ico')
-        if os.path.exists(icon_path):
-            app.setWindowIcon(QIcon(icon_path))
-        
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec())
-    except Exception as e:
-        print(f"程序初始化失败: {e}")
-        sys.exit(1)
+        icon_path = get_app_icon_path()
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
+        else:
+            logger.warning("应用图标文件不存在: %s", icon_path)
+    except OSError as e:
+        logger.error("设置应用图标失败: %s", str(e))
+
+    return app
+
+def main() -> None:
+    """主函数"""
+    # 初始化
+    init_locale()
+    init_database()
+    app = init_app()
+
+    # 创建并显示主窗口
+    window = MainWindow()
+    window.show()
+
+    # 运行应用程序
+    sys.exit(app.exec())
 
 if __name__ == '__main__':
     main() 

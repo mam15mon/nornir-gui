@@ -1,29 +1,20 @@
 from typing import List, Dict
 import logging
 import os
-from PySide6.QtCore import QObject, Signal
 from nornir_netmiko.tasks import netmiko_send_command, netmiko_send_config, netmiko_multiline
-from ..base.nornir_manager import NornirManager
 from core.db.database import Database
 from core.db.models import Settings
 from nornir.core.task import Result
 from PySide6.QtCore import QUrl
+from .base import BaseOperation
 
 logger = logging.getLogger(__name__)
 
-class CommandSender(QObject):
+class CommandSender(BaseOperation):
     """命令发送操作类"""
-    
-    # 定义信号
-    status_changed = Signal(str, str)  # (device_name, status)
-    progress_updated = Signal(int, int)  # (current, total)
-    operation_finished = Signal(bool)  # success
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.is_running = False
-        self.nornir_mgr = NornirManager()
-        self.results = {}  # 存储执行结果
         self.db = Database()
         
         try:
@@ -228,18 +219,6 @@ class CommandSender(QObject):
                 result=(False, error_msg, None)
             )
             
-    def _validate_device(self, device) -> bool:
-        """验证设备数据是否完整"""
-        required_fields = ['name', 'hostname', 'username', 'password']
-        return all(hasattr(device, field) and getattr(device, field) for field in required_fields)
-    
-    def stop_command(self):
-        """停止命令执行"""
-        if self.is_running:
-            self.is_running = False
-            if self.nornir_mgr:
-                self.nornir_mgr.close()
-            
     def start_command(self, devices: List, command: str, mode: str, use_timing: bool = False):
         """开始执行命令"""
         if self.is_running:
@@ -252,7 +231,7 @@ class CommandSender(QObject):
             return
             
         self.is_running = True
-        self.results = {}  # 重置结果
+        self.results.clear()  # 使用clear()而不是重新赋值
         total = len(devices)
         completed = 0
         logger.info(f"开始在 {total} 个设备上执行命令")
@@ -262,14 +241,25 @@ class CommandSender(QObject):
         
         try:
             # 验证设备数据
+            valid_devices = []
             for device in devices:
                 if not self._validate_device(device):
                     name = getattr(device, 'name', 'Unknown')
-                    raise ValueError(f"设备 {name} 数据不完整")
+                    logger.warning(f"设备 {name} 数据不完整，已跳过")
+                    continue
+                valid_devices.append(device)
+                
+            if not valid_devices:
+                logger.error("没有有效的设备可以执行命令")
+                self.operation_finished.emit(False)
+                return
             
             # 使用 NornirManager 初始化
-            self.nornir_mgr.init_nornir(devices)
-            nr = self.nornir_mgr.get_nornir()
+            nr = self.nornir_mgr.init_nornir(valid_devices)
+            if not nr:
+                logger.error("nornir 初始化失败")
+                self.operation_finished.emit(False)
+                return
             
             # 执行并行命令
             results = nr.run(
@@ -315,15 +305,14 @@ class CommandSender(QObject):
                         'output_file': output_file
                     }
                     self.status_changed.emit(device_name, status_msg)
-                
-                # 移除原来的状态更新信号发送
-                # self.status_changed.emit(device_name, self.results[device_name]['status'])  # 注释掉这行
             
             # 如果所有设备都执行完成，立即发送结果
             if all_completed and completed == total:
                 logger.info("所有设备命令执行完成")
                 self.operation_finished.emit(True)
-                return
+            else:
+                logger.warning("部分设备命令执行未完成")
+                self.operation_finished.emit(False)
             
         except Exception as e:
             error_msg = str(e)
@@ -333,16 +322,9 @@ class CommandSender(QObject):
             
         finally:
             self.is_running = False
-            self.nornir_mgr.close()  # 确保关闭连接
+            if self.nornir_mgr:
+                self.nornir_mgr.close()  # 确保关闭连接
             logger.info("命令执行操作结束")
-    
-    def get_results(self) -> dict:
-        """获取执行结果
-        
-        Returns:
-            dict: {device_name: {'status': str, 'result': str}} 格式的结果字典
-        """
-        return self.results 
 
     def format_overview_content(self, device_name, result):
         """格式化概览内容"""

@@ -9,6 +9,7 @@ import re
 from core.utils.logger import log_operation, handle_error
 from core.db.database import Database
 from core.db.models import Settings
+from .base import BaseOperation
 import os
 
 logger = logging.getLogger(__name__)
@@ -178,19 +179,11 @@ def parse_mac_address(mac_output: str, platform: str) -> list:
     
     return results
 
-class MacIpQuery(QObject):
+class MacIpQuery(BaseOperation):
     """MAC-IP 查询操作类"""
-    
-    # 定义信号
-    status_changed = Signal(str, str)  # (device_name, status)
-    progress_updated = Signal(int, int)  # (current, total)
-    operation_finished = Signal(bool)  # success
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.is_running = False
-        self.nornir_mgr = NornirManager()
-        self.results = {}  # 存储查询结果
         self.found_mac_addresses = set()  # 清除之前可能存在的MAC地址
         
         # 获取基础路径
@@ -517,12 +510,3 @@ class MacIpQuery(QObject):
                 result=error_msg,
                 failed=True
             )
-    
-    def _validate_device(self, device) -> bool:
-        """验证设备数据是否完整"""
-        required_fields = ['name', 'hostname', 'username', 'password', 'device_type']
-        return all(hasattr(device, field) and getattr(device, field) for field in required_fields)
-    
-    def get_results(self) -> dict:
-        """获取查询结果"""
-        return self.results

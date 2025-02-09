@@ -1,31 +1,22 @@
+from typing import List
 import os
 import logging
 import pandas as pd
-from typing import List, Any
 from datetime import datetime
-from PySide6.QtCore import QObject, Signal
-from nornir_netmiko.tasks import netmiko_send_command
 from nornir.core.task import Task, Result
-from ..base.nornir_manager import NornirManager
+from nornir_netmiko.tasks import netmiko_send_command
 from core.db.database import Database
 from core.db.models import Settings
 from core.utils.logger import log_operation, handle_error
+from .base import BaseOperation
 
 logger = logging.getLogger(__name__)
 
-class DnatQuery(QObject):
-    """DNAT 查询操作类"""
-    
-    # 定义信号
-    status_changed = Signal(str, str)  # (device_name, status)
-    progress_updated = Signal(int, int)  # (current, total)
-    operation_finished = Signal(bool)  # success
+class DnatQuery(BaseOperation):
+    """DNAT查询操作类"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.is_running = False
-        self.nornir_mgr = NornirManager()
-        self.results = {}  # 存储查询结果
         self.db = Database()
         
         # 获取基础路径
@@ -36,54 +27,9 @@ class DnatQuery(QObject):
         # 创建查询结果目录
         self.query_path = os.path.normpath(os.path.join(self.base_path, "DNAT查询"))
         os.makedirs(self.query_path, exist_ok=True)
-            
-    @log_operation("DNAT查询")
-    def start(self, devices: List[Any]) -> None:
-        """开始查询 DNAT 配置"""
-        self.is_running = True
-        self.results.clear()
-        
-        try:
-            # 过滤无效设备
-            valid_devices = [device for device in devices if self._validate_device(device)]
-            if not valid_devices:
-                logger.warning("没有有效的设备可以查询")
-                self.operation_finished.emit(False)
-                return
-            
-            # 初始化nornir
-            logger.info("初始化 nornir...")
-            nr = self.nornir_mgr.init_nornir(valid_devices)
-            if not nr:
-                logger.error("nornir 初始化失败")
-                self.operation_finished.emit(False)
-                return
-            
-            try:
-                # 执行查询
-                logger.info("开始执行DNAT查询任务...")
-                nr.run(
-                    name="DNAT查询",
-                    task=self.query_dnat
-                )
-                self.operation_finished.emit(True)
-            except Exception as e:
-                self.results = handle_error(logger, "全局", e, "DNAT查询")
-                self.operation_finished.emit(False)
-        finally:
-            self.is_running = False
-            self.nornir_mgr.close()
-            logger.info("DNAT查询操作完成")
-            
-    def stop(self):
-        """停止DNAT查询"""
-        logger.info("停止DNAT查询操作")
-        self.is_running = False
-        if self.nornir_mgr:
-            self.nornir_mgr.close()
-            
+    
     def query_dnat(self, task: Task) -> Result:
-        """查询单个设备的 DNAT 配置"""
+        """查询单个设备的DNAT配置"""
         if not self.is_running:
             return Result(
                 host=task.host,
@@ -353,19 +299,45 @@ class DnatQuery(QObject):
                 result=handle_error(logger, device_name, e, "DNAT查询")
             )
     
-    def _validate_device(self, device) -> bool:
-        """验证设备数据是否完整"""
-        required_fields = ['name', 'hostname', 'username', 'password', 'device_type']
-        return all(hasattr(device, field) and getattr(device, field) for field in required_fields)
-    
-    def get_results(self) -> dict:
-        """获取查询结果"""
-        return self.results
-
+    @log_operation("DNAT查询")
+    def start(self, devices: List[str]) -> None:
+        """开始查询DNAT"""
+        self.is_running = True
+        self.results.clear()
+        
+        try:
+            # 过滤无效设备
+            valid_devices = [device for device in devices if self._validate_device(device)]
+            if not valid_devices:
+                logger.warning("没有有效的设备可以查询")
+                return
+            
+            # 初始化nornir
+            logger.info("初始化 nornir...")
+            nr = self.nornir_mgr.init_nornir(valid_devices)
+            if not nr:
+                logger.error("nornir 初始化失败")
+                return
+            
+            try:
+                # 执行查询
+                logger.info("开始执行查询任务...")
+                nr.run(
+                    name="DNAT查询",
+                    task=self.query_dnat
+                )
+            except Exception as e:
+                self.results = handle_error(logger, "全局", e, "DNAT查询")
+        finally:
+            self.is_running = False
+            self.nornir_mgr.close()
+            logger.info("查询操作完成")
+            
     def _handle_empty_result(self, device_name: str, status: str):
+        """处理空结果"""
         self.status_changed.emit(device_name, status)
         self.results[device_name] = {
             'status': status,
             'result': "未查询到有效DNAT配置",
             'output_file': None
-        } 
+        }

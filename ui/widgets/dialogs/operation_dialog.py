@@ -20,6 +20,7 @@ from core.nornir_manager.threads import (
 from .command_dialog import CommandDialog
 from core.nornir_manager.operations.dnat_query import DnatQuery
 
+logger = logging.getLogger(__name__)
 
 class OperationDialog(QDialog):
     """设备操作对话框"""
@@ -248,6 +249,8 @@ class OperationDialog(QDialog):
                     lambda results, start_time: self.parent().show_result_dialog("命令执行", results, start_time)
                 )
                 self.current_thread.start()
+                # 关闭操作对话框
+                self.accept()
             
     def _get_selected_devices(self) -> List[Any]:
         """获取选中的设备数据"""
@@ -260,9 +263,24 @@ class OperationDialog(QDialog):
 
     def closeEvent(self, event: Any) -> None:
         """对话框关闭事件"""
-        # 停止当前运行的线程
-        if self.current_thread and self.current_thread.isRunning():
-            self.current_thread.stop()
-            self.current_thread.wait()
-            
-        event.accept() 
+        try:
+            # 停止当前运行的线程
+            if hasattr(self, 'current_thread') and self.current_thread:
+                logger.info("检测到运行中的线程")
+                try:
+                    if self.current_thread.isRunning():
+                        logger.info("正在停止运行中的线程...")
+                        self.current_thread.stop()
+                        if not self.current_thread.wait(5000):  # 等待最多5秒
+                            logger.warning("线程未能在5秒内停止")
+                    self.current_thread.deleteLater()  # 安全删除线程对象
+                except RuntimeError as e:
+                    logger.error(f"线程操作失败: {str(e)}")
+                except Exception as e:
+                    logger.error(f"处理线程时出错: {str(e)}")
+                finally:
+                    self.current_thread = None
+        except Exception as e:
+            logger.error(f"关闭对话框时出错: {str(e)}")
+        finally:
+            event.accept() 

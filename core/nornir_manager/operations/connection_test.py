@@ -1,26 +1,15 @@
 from typing import List
-from PySide6.QtCore import QObject, Signal
 import logging
 from nornir.core.task import Task, Result
-from ..base.nornir_manager import NornirManager, encode_task_name
 from nornir_utils.plugins.tasks.networking import tcp_ping
 from core.utils.logger import log_operation, handle_error
+from ..base.nornir_manager import encode_task_name
+from .base import BaseOperation
 
 logger = logging.getLogger(__name__)
 
-class ConnectionTest(QObject):
+class ConnectionTest(BaseOperation):
     """连接测试操作类"""
-    
-    # 定义信号
-    status_changed = Signal(str, str)  # (device_name, status)
-    progress_updated = Signal(int, int)  # (current, total)
-    operation_finished = Signal(bool)  # success
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.is_running = False
-        self.nornir_mgr = NornirManager()
-        self.results = {}  # 存储测试结果
     
     @encode_task_name
     def test_connection(self, task: Task) -> Result:
@@ -140,26 +129,4 @@ class ConnectionTest(QObject):
         finally:
             self.is_running = False
             self.nornir_mgr.close()
-            logger.info(f"测试完成，results: {self.results}")
-            
-    def stop(self):
-        """停止测试"""
-        logger.info("停止测试操作")
-        self.is_running = False
-        if self.nornir_mgr:
-            self.nornir_mgr.close()
-    
-    def get_results(self) -> dict:
-        """获取测试结果（格式修正）"""
-        formatted_results = {}
-        for device_name, result in self.results.items():
-            # 统一结果格式
-            if isinstance(result, str):
-                formatted_results[device_name] = {
-                    'status': result,
-                    'result': result,
-                    'output_file': None
-                }
-            else:
-                formatted_results[device_name] = result
-        return formatted_results 
+            logger.info(f"测试完成，results: {self.results}") 

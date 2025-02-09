@@ -2,29 +2,20 @@ from typing import List
 import os
 import logging
 from datetime import datetime
-from PySide6.QtCore import QObject, Signal
 from nornir.core.task import Task, Result
 from nornir_netmiko.tasks import netmiko_send_command
-from ..base.nornir_manager import NornirManager
 from core.db.database import Database
 from core.db.models import Settings
 from core.utils.logger import log_operation, handle_error
+from .base import BaseOperation
 
 logger = logging.getLogger(__name__)
 
-class ConfigBackup(QObject):
+class ConfigBackup(BaseOperation):
     """配置备份操作类"""
-    
-    # 定义信号
-    status_changed = Signal(str, str)  # (device_name, status)
-    progress_updated = Signal(int, int)  # (current, total)
-    operation_finished = Signal(bool)  # success
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.is_running = False
-        self.nornir_mgr = NornirManager()
-        self.results = {}  # 存储备份结果
         self.db = Database()
         
         # 获取基础路径
@@ -95,11 +86,6 @@ class ConfigBackup(QObject):
                 result=handle_error(logger, device_name, e, "配置备份")
             )
     
-    def _validate_device(self, device) -> bool:
-        """验证设备数据是否完整"""
-        required_fields = ['name', 'hostname', 'username', 'password']
-        return all(hasattr(device, field) and getattr(device, field) for field in required_fields)
-    
     @log_operation("配置备份")
     def start(self, devices: List[str]) -> None:
         """开始备份配置"""
@@ -132,15 +118,4 @@ class ConfigBackup(QObject):
         finally:
             self.is_running = False
             self.nornir_mgr.close()
-            logger.info("备份操作完成")
-            
-    def stop(self):
-        """停止备份"""
-        logger.info("停止备份操作")
-        self.is_running = False
-        if self.nornir_mgr:
-            self.nornir_mgr.close()
-    
-    def get_results(self) -> dict:
-        """获取备份结果"""
-        return self.results 
+            logger.info("备份操作完成") 

@@ -34,43 +34,21 @@ class ThreadManager(QObject):
         }
         
     def add_thread(self, thread_type: str, thread: ThreadType, result_callback: Callable):
-        """统一的添加线程方法"""
+        """
+        统一的添加线程方法
+        
+        Args:
+            thread_type: 线程类型，必须是 self.threads 中的一个键
+            thread: 要添加的线程实例
+            result_callback: 线程完成时的回调函数
+        """
+        if thread_type not in self.threads:
+            raise ValueError(f"不支持的线程类型: {thread_type}")
+            
         self.threads[thread_type].append(thread)
         thread.finished.connect(result_callback)
         thread.finished.connect(lambda *args: self._on_thread_finished(thread_type, thread))
-        
-    def add_test_thread(self, thread: TestThread, result_callback: Callable):
-        """添加测试线程"""
-        self.add_thread('test', thread, result_callback)
-        
-    def add_backup_thread(self, thread: BackupThread, result_callback: Callable):
-        """添加备份线程"""
-        self.add_thread('backup', thread, result_callback)
-        
-    def add_diff_thread(self, thread: DiffThread, result_callback: Callable):
-        """添加对比线程"""
-        self.add_thread('diff', thread, result_callback)
-        
-    def add_command_thread(self, thread: CommandThread, result_callback: Callable):
-        """添加命令线程"""
-        self.add_thread('command', thread, result_callback)
-        
-    def add_save_thread(self, thread: SaveThread, result_callback: Callable):
-        """添加保存线程"""
-        self.add_thread('save', thread, result_callback)
-        
-    def add_dnat_thread(self, thread: DnatQuery, result_callback: Callable):
-        """添加 DNAT 查询线程"""
-        self.add_thread('dnat', thread, result_callback)
-        
-    def add_interface_thread(self, thread: InterfaceThread, result_callback: Callable):
-        """添加接口查询线程"""
-        self.add_thread('interface', thread, result_callback)
-
-    def add_macip_thread(self, thread: MacIpThread, result_callback: Callable):
-        """添加MAC-IP查询线程"""
-        self.add_thread('macip', thread, result_callback)
-        
+                
     def stop_all_threads(self):
         """停止所有线程"""
         for threads in self.threads.values():
@@ -96,6 +74,4 @@ class ThreadManager(QObject):
             for thread in threads:
                 if thread.isRunning():
                     thread.wait()
-        self.threads['dnat'].clear()
-        self.threads['interface'].clear()
-        self.threads['macip'].clear() 
+            threads.clear()  # 清理所有类型的线程列表 

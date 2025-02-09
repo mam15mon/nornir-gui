@@ -212,10 +212,9 @@ class OperationDialog(QDialog):
             
             try:
                 thread_manager = self.parent().thread_manager
-                add_method = getattr(thread_manager, f"add_{thread_type}_thread")
-                logging.info(f"调用方法: add_{thread_type}_thread")
-                
-                add_method(
+                # 使用统一的add_thread方法
+                thread_manager.add_thread(
+                    thread_type,
                     self.current_thread,
                     lambda results, start_time: self.parent().show_result_dialog(operation_name, results, start_time)
                 )
@@ -242,13 +241,13 @@ class OperationDialog(QDialog):
                 # 创建并设置命令线程
                 self.current_thread = CommandThread()
                 self.current_thread.setup(devices, command, mode, use_timing, self.parent().update_device_status)
-                # 添加到线程管理器
-                self.parent().thread_manager.add_command_thread(
+                # 添加到线程管理器，使用统一的add_thread方法
+                self.parent().thread_manager.add_thread(
+                    'command',
                     self.current_thread,
                     lambda results, start_time: self.parent().show_result_dialog("命令执行", results, start_time)
                 )
                 self.current_thread.start()
-                self.accept()
             
     def _get_selected_devices(self) -> List[Any]:
         """获取选中的设备数据"""

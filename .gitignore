@@ -8,12 +8,19 @@ databases/
 logs/
 *.log
 
+# excel文件
+*.xlsx
+
+# 操作记录和存档
+backup/
+
 # 编译和发布
 release/
 build/
 develop-eggs/
 dist/
 downloads/
+
 eggs/
 .eggs/
 lib/

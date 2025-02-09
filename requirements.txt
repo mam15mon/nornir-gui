@@ -1,0 +1,16 @@
+PySide6==6.8.1.1
+nornir==3.5.0
+nornir-netmiko==1.0.1
+nornir-utils==0.2.0
+SQLAlchemy==2.0.37
+ntc-templates==7.6.0
+jinja2==3.1.5
+netmiko==4.5.0
+paramiko==3.5.0
+pyyaml==6.0.2
+python-dotenv==1.0.1
+colorama==0.4.6
+pandas==2.2.3
+openpyxl==3.1.5
+PySocks==1.7.1
+natsort==8.4.0

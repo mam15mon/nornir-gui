@@ -1,0 +1,16 @@
+Value IPADDRESS ((\d+\.){3}\d+)
+Value Required MACADDRESS (\w{4}-\w{4}-\w{4})
+Value EXPTIME (\d+)
+Value TYPE ([A-Z])
+Value VLAN (\d+)
+Value INTERFACE (\S+)
+Value VRF (\w+)
+
+Start
+  ^IP\s+ADDRESS\s+MAC\s+ADDRESS\s+EXPIRE\(M\)\s+TYPE\s+INTERFACE\s+VPN-INSTANCE -> Record
+  ^${IPADDRESS}\s+${MACADDRESS}\s+${EXPTIME}\s+${TYPE}\s+${INTERFACE}\s+${VRF}\s*$$ -> Record
+  ^${IPADDRESS}\s+${MACADDRESS}\s+${EXPTIME}\s+${TYPE}\s+${INTERFACE}\s*$$ -> Record
+  ^${IPADDRESS}\s+${MACADDRESS}\s+${TYPE}\s+${INTERFACE}\s*$$ -> Record
+  ^${IPADDRESS}\s+${MACADDRESS}\s+${TYPE}\s+${INTERFACE}\s+${VRF}\s*$$ -> Record
+  ^${IPADDRESS}\s+${MACADDRESS}\s+${EXPTIME}\s+${TYPE}/${VLAN}\s+${INTERFACE}\s*$$ -> Record
+  ^${IPADDRESS}\s+${MACADDRESS}\s+${EXPTIME}\s+${TYPE}/${VLAN}\s+${INTERFACE}\s+${VRF}\s*$$ -> Record

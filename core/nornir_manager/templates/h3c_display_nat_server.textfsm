@@ -1,0 +1,21 @@
+Value GLOBAL_IP (\d+\.\d+\.\d+\.\d+)
+Value GLOBAL_START_PORT (\d+)
+Value GLOBAL_END_PORT (\d+|)
+Value INSIDE_IP (\d+\.\d+\.\d+\.\d+)
+Value INSIDE_START_PORT (\d+)
+Value INSIDE_END_PORT (\d+|)
+Value PROTOCOL (\d+\(\w+\))
+Value NAME (.+?)
+Value INTERFACE (\S+)
+
+
+Start
+  ^.*Interface:.* -> Continue.Record
+  ^\s+Interface:\s+${INTERFACE}\s*$$
+  ^\s+Protocol:\s+${PROTOCOL}\s*$$
+  ^\s+Global IP/port:\s+${GLOBAL_IP}/${GLOBAL_START_PORT}(-${GLOBAL_END_PORT})?\s*$$
+  ^\s+Local IP/port\s+:\s+${INSIDE_IP}/${INSIDE_START_PORT}(-${INSIDE_END_PORT})?\s*$$
+  ^\s+Rule name\s+:\s+${NAME}\s*$$
+  ^\s+NAT counting\s+:\s+\d+\s*$$
+  ^\s+(ACL\s+:\s+\d+\s*$$)?
+  ^\s+Config status\s+:\s+\w+\s*$$ -> Record

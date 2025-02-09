@@ -1,0 +1,18 @@
+Value GLOBAL_IP (\d+\.\d+\.\d+\.\d+)
+Value GLOBAL_START_PORT ([^\s]+)
+Value GLOBAL_END_PORT ([^\s]+)
+Value INSIDE_IP (\d+\.\d+\.\d+\.\d+)
+Value INSIDE_START_PORT ([^\s]+)
+Value INSIDE_END_PORT ([^\s]+)
+Value PROTOCOL (\S+)
+Value NAME (.+?)
+Value ID (\d+)
+
+Start
+  ^\s+server name\s+:\s+${NAME}\s*$$
+  ^\s+id\s+:\s+${ID}\s+
+  ^\s+global-start-addr\s+:\s+${GLOBAL_IP}\s+
+  ^\s+inside-start-addr\s+:\s+${INSIDE_IP}\s+
+  ^\s+global-start-port\s+:\s+${GLOBAL_START_PORT}\s+global-end-port\s+:\s+${GLOBAL_END_PORT}\s+
+  ^\s+inside-start-port\s+:\s+${INSIDE_START_PORT}\s+inside-end-port\s+:\s+${INSIDE_END_PORT}\s+
+  ^\s+vsys\s+:\s+public\s+protocol\s+:\s+${PROTOCOL}\s+ -> Record

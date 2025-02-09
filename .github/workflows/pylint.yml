@@ -1,0 +1,23 @@
+name: Pylint
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
+        pip install -r requirements.txt
+        pip install PySide6  # 显式安装 PySide6
+    - name: Analysing the code with pylint
+      continue-on-error: true  # 即使有 lint 错误也继续运行
+      run: |
+        pylint --output-format=text $(git ls-files '*.py') || echo "Pylint found some issues" 

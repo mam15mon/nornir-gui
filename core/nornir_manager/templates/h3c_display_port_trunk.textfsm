@@ -1,0 +1,12 @@
+Value Required INTERFACE (\S+)
+Value PVID (\d+)
+Value VLAN_LIST ([0-9,\-]+(?:\s*,\s*[0-9,\-]+)*(?=\s*$))
+
+Start
+  ^Interface\s+PVID\s+VLAN Passing\s*$$ -> Parse
+  ^. -> Error
+
+Parse
+  ^${INTERFACE}\s+${PVID}\s+${VLAN_LIST}\s*$$ -> Record
+  ^\s*$$
+  ^. -> Error

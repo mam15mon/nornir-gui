@@ -1,0 +1,50 @@
+[MASTER]
+# 递归查找 Python 文件
+recursive=yes
+
+# 忽略的文件和目录
+ignore=CVS,.git,__pycache__,build,dist
+
+[MESSAGES CONTROL]
+# 禁用一些不太重要的警告
+disable=C0111,  # 缺少文档字符串
+        C0103,  # 命名不符合规范
+        C0303,  # 行尾有空格
+        W0311,  # 错误的缩进
+        W0603,  # 使用全局语句
+        R0903,  # 太少的公共方法
+        R0913,  # 太多参数
+        R0914,  # 太多局部变量
+
+[FORMAT]
+# 最大行长度
+max-line-length=120
+
+# 缩进大小
+indent-after-paren=4
+
+[BASIC]
+# 变量名最短长度
+variable-rgx=[a-z_][a-z0-9_]{1,30}$
+
+# 常量名最短长度
+const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
+
+# 参数名最短长度
+argument-rgx=[a-z_][a-z0-9_]{1,30}$
+
+[SIMILARITIES]
+# 最小相似行数
+min-similarity-lines=6
+
+[TYPECHECK]
+# 当导入错误时生成警告
+generated-members=REQUEST,acl_users,aq_parent,objects,DoesNotExist,id,pk,_meta,base_fields,context
+
+[VARIABLES]
+# 检查未使用的导入
+init-import=no
+
+[IMPORTS]
+# 是否应该检查导入顺序
+analyse-fallback-blocks=no 

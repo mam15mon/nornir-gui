@@ -51,7 +51,7 @@ class BaseOperationThread(QThread):
     def stop(self) -> None:
         """停止操作"""
         logging.info("停止操作")
-        if hasattr(self.operation, 'stop'):
+        if self.operation and hasattr(self.operation, 'stop'):
             self.operation.stop()
             logging.info("操作已停止")
         else:

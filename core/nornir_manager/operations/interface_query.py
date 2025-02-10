@@ -4,10 +4,8 @@ import pandas as pd
 from natsort import natsorted, ns
 from typing import List, Any, Dict, Tuple
 from datetime import datetime
-from PySide6.QtCore import QObject, Signal
 from nornir_netmiko.tasks import netmiko_send_command
 from nornir.core.task import Task, Result
-from ..base.nornir_manager import NornirManager
 from core.db.database import Database
 from core.db.models import Settings
 from core.utils.logger import log_operation, handle_error

@@ -3,7 +3,6 @@ import os
 import logging
 from datetime import datetime
 import difflib
-import html
 from nornir.core.task import Task, Result
 from nornir_netmiko.tasks import netmiko_send_command
 from core.db.database import Database

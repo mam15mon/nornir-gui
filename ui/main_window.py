@@ -28,6 +28,8 @@ class MainWindow(QMainWindow):
         # 创建标签页
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabPosition(QTabWidget.North)
+        # 添加样式表使标签居中
+        self.tab_widget.setStyleSheet("QTabWidget::tab-bar { alignment: center; }")
         self.setCentralWidget(self.tab_widget)
 
         # 添加所有页面

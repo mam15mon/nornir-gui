@@ -244,9 +244,10 @@ class InterfaceQuery(BaseOperation):
             # 根据设备类型选择模板
             template_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
             if device.platform == "hp_comware":
-                template_name = "h3c_display_interface_brief.textfsm"
+                template_name = os.path.join("hp_comware", "h3c_display_interface_brief.textfsm")
             else:
-                template_name = "huawei_display_interface_brief.textfsm"
+                # 默认使用huawei_vrp的模板
+                template_name = os.path.join("huawei_vrp", "huawei_display_interface_brief.textfsm")
                 
             template_path = os.path.join(template_dir, template_name)
             logger.debug(f"{device_name} - 使用模板: {template_path}")

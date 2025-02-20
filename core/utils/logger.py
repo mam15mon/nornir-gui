@@ -8,17 +8,12 @@ from typing import Callable, Any
 from core.db.database import Database
 from core.db.models import Settings
 import tempfile
+from logging.handlers import RotatingFileHandler
+import glob
 
-def get_log_level(level_str: str) -> int:
-    """将字符串日志级别转换为 logging 级别"""
-    levels = {
-        'DEBUG': logging.DEBUG,
-        'INFO': logging.INFO,
-        'WARNING': logging.WARNING,
-        'ERROR': logging.ERROR,
-        'CRITICAL': logging.CRITICAL
-    }
-    return levels.get(level_str.upper(), logging.INFO)
+def get_log_level(level_name: str) -> int:
+    """获取日志级别"""
+    return getattr(logging, level_name.upper(), logging.INFO)
 
 def log_operation(operation_name: str) -> Callable:
     """操作日志装饰器"""
@@ -46,6 +41,30 @@ def log_operation(operation_name: str) -> Callable:
         return wrapper
     return decorator
 
+def cleanup_old_logs(log_dir: str, days: int = 7):
+    """清理旧的日志文件
+    
+    Args:
+        log_dir: 日志目录
+        days: 保留天数
+    """
+    try:
+        # 获取所有日志文件
+        log_files = glob.glob(os.path.join(log_dir, "nornir_gui_*.log*"))
+        current_date = datetime.now()
+        
+        for log_file in log_files:
+            # 获取文件修改时间
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(log_file))
+            # 如果文件超过指定天数，删除
+            if (current_date - file_mtime).days > days:
+                try:
+                    os.remove(log_file)
+                except Exception as e:
+                    print(f"删除旧日志文件失败 {log_file}: {e}")
+    except Exception as e:
+        print(f"清理旧日志文件时发生错误: {e}")
+
 def setup_logging():
     """配置日志系统"""
     # 确保日志目录存在
@@ -58,6 +77,9 @@ def setup_logging():
         print(f"无法写入日志目录 {log_dir}: {e}")
         log_dir = os.path.join(tempfile.gettempdir(), 'nornir_gui_logs')
         os.makedirs(log_dir, exist_ok=True)
+    
+    # 清理旧日志文件
+    cleanup_old_logs(log_dir)
     
     # 生成带日期的日志文件路径
     current_date = datetime.now().strftime("%Y%m%d")
@@ -79,19 +101,24 @@ def setup_logging():
             print(f"读取日志级别设置失败: {e}")
             log_level = logging.INFO  # 如果无法读取设置，默认使用 INFO 级别
         
-        # 创建文件处理器
-        file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
+        # 创建文件处理器 - 使用 RotatingFileHandler
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=10,  # 每天最多10个文件，超过会自动删除最旧的
+            encoding='utf-8'
+        )
         file_handler.setFormatter(formatter)
-        file_handler.setLevel(log_level)  # 设置文件处理器的日志级别
+        file_handler.setLevel(log_level)
         
         # 创建控制台处理器
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
-        console_handler.setLevel(log_level)  # 设置控制台处理器的日志级别
+        console_handler.setLevel(log_level)
         
         # 配置根日志记录器
         root_logger = logging.getLogger()
-        root_logger.setLevel(log_level)  # 设置根日志记录器的日志级别
+        root_logger.setLevel(log_level)
         
         # 清除现有处理器
         root_logger.handlers.clear()
@@ -106,7 +133,7 @@ def setup_logging():
         print(f"日志系统初始化失败: {e}")
         # 仅使用控制台日志
         logging.basicConfig(
-            level=logging.INFO,  # 使用 INFO 作为默认级别
+            level=logging.INFO,
             format=formatter._fmt,
             handlers=[console_handler]
         )

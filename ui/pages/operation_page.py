@@ -98,9 +98,14 @@ class OperationPage(QWidget):
                 self.stop_btn.setEnabled(True)
 
     def show_result_dialog(self, operation_name: str, results: dict, start_time: datetime):
-        """显示结果统计对话框"""
-        dialog = ResultDialog(operation_name, results, start_time, self)
-        dialog.exec()
+        """显示结果对话框"""
+        try:
+            dialog = ResultDialog(operation_name, results, start_time, self)
+            dialog.exec()
+        except KeyboardInterrupt:
+            print("操作被用户中断")
+        except Exception as e:
+            print(f"显示结果对话框时发生错误: {str(e)}")
         if not self.thread_manager.has_running_threads():
             self.stop_btn.setEnabled(False)
 

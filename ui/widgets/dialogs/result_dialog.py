@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QTextBrowser, QTabWidget,
-                             QWidget, QTableWidget, QTableWidgetItem, QFrame)
+                             QWidget, QTableWidget, QTableWidgetItem, QFrame,
+                             QScrollArea)
 from datetime import datetime
 import os
 from PySide6.QtCore import QUrl, Qt
@@ -31,14 +32,16 @@ class DeviceResultWidget(QFrame):
         
     def init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)  # 最小边距
+        layout.setSpacing(2)  # 最小间距
         
         # 设备信息头部
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(5)
+        
         status = self.result.get('status', 'Unknown')
         header_layout.addWidget(QLabel(f"设备: {self.device_name}"))
-        status_label = QLabel(f"状态: {status}")
-        status_label.setStyleSheet(f"color: {'green' if '成功' in status else 'red'};")
-        header_layout.addWidget(status_label)
+        header_layout.addWidget(QLabel(f"状态: {status}"))
         
         # 如果有输出文件，添加文件链接
         output_file = self.result.get('output_file')
@@ -47,52 +50,55 @@ class DeviceResultWidget(QFrame):
             file_link.setOpenExternalLinks(True)
             header_layout.addWidget(file_link)
             
+        # 添加行数信息到头部
+        header_layout.addWidget(self.line_info)
         header_layout.addStretch()
+        
+        # 只有当总行数超过初始显示行数时才显示按钮
+        if len(self.lines) > self.current_line:
+            load_more_btn = QPushButton("加载更多")
+            load_more_btn.setFixedWidth(80)
+            load_more_btn.clicked.connect(self.load_more)
+            header_layout.addWidget(load_more_btn)
+            
+            load_all_btn = QPushButton("全部")
+            load_all_btn.setFixedWidth(50)
+            load_all_btn.clicked.connect(self.load_all)
+            header_layout.addWidget(load_all_btn)
+        
         layout.addLayout(header_layout)
         
         # 结果文本显示
         self.text_browser.setReadOnly(True)
-        layout.addWidget(self.text_browser)
-        
-        # 按钮布局
-        button_layout = QHBoxLayout()
-        
-        # 显示行数信息
-        button_layout.addWidget(self.line_info)
-        
-        button_layout.addStretch()
-        
-        # 只有当总行数超过初始显示行数时才显示按钮
-        if len(self.lines) > self.current_line:
-            load_more_btn = QPushButton("加载更多(200行)")
-            load_more_btn.clicked.connect(self.load_more)
-            button_layout.addWidget(load_more_btn)
+        if self.full_text:
+            content_lines = min(len(self.lines), self.current_line)
+            line_height = 16
+            self.text_browser.setMinimumHeight(min(content_lines * line_height, 300))  # 限制最大高度
+        else:
+            self.text_browser.hide()
             
-            load_all_btn = QPushButton("加载全部")
-            load_all_btn.clicked.connect(self.load_all)
-            button_layout.addWidget(load_all_btn)
-        
-        layout.addLayout(button_layout)
-        
-        # 添加分割线
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(line)
+        layout.addWidget(self.text_browser)
         
         # 更新文本显示
         self.update_text()
         
     def update_text(self):
         """更新文本显示"""
+        if not self.full_text:
+            return
+            
         displayed_lines = []
         for line in self.lines[:self.current_line]:
-            # 跳过包含文件链接的行
             if '输出文件:' not in line and 'file:///' not in line:
                 displayed_lines.append(line)
         
         self.text_browser.setText('\n'.join(displayed_lines))
-        self.line_info.setText(f"显示 {min(self.current_line, len(self.lines))}/{len(self.lines)} 行")
+        self.line_info.setText(f"{min(self.current_line, len(self.lines))}/{len(self.lines)}行")
+        
+        # 动态调整高度，但限制最大高度
+        content_lines = min(len(self.lines), self.current_line)
+        line_height = 16
+        self.text_browser.setMinimumHeight(min(content_lines * line_height, 300))
         
     def load_more(self):
         """加载更多行"""
@@ -224,8 +230,19 @@ class ResultDialog(QDialog):
         
         overview_layout.addLayout(stats_layout)
         
+        # 创建概览的滚动区域
+        overview_scroll = QScrollArea()
+        overview_scroll.setWidgetResizable(True)
+        overview_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        overview_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # 创建概览内容容器
+        overview_content_widget = QWidget()
+        overview_content_layout = QVBoxLayout(overview_content_widget)
+        
         # 概览显示 - 显示所有设备
         self.overview_text.setReadOnly(True)
+        self.overview_text.setMinimumHeight(400)  # 设置最小高度
         
         # 格式化概览内容 - 显示所有设备
         overview_content = []
@@ -235,7 +252,11 @@ class ResultDialog(QDialog):
                 overview_content.append(content)
         
         self.overview_text.setHtml("<br>".join(overview_content))
-        overview_layout.addWidget(self.overview_text)
+        overview_content_layout.addWidget(self.overview_text)
+        
+        # 设置滚动区域的内容
+        overview_scroll.setWidget(overview_content_widget)
+        overview_layout.addWidget(overview_scroll)
         
         tab_widget.addTab(overview_tab, "概览")
         
@@ -243,9 +264,15 @@ class ResultDialog(QDialog):
         details_tab = QWidget()
         details_layout = QVBoxLayout(details_tab)
         
-        # 创建滚动区域容器
-        scroll_area = QWidget()
-        scroll_layout = QVBoxLayout(scroll_area)
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # 创建容器widget
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
         
         # 过滤结果：对于MAC-IP查询只保留有效结果，其他命令显示所有结果
         valid_results = {}
@@ -268,6 +295,9 @@ class ResultDialog(QDialog):
             scroll_layout.addWidget(device_widget)
         
         scroll_layout.addStretch()
+        
+        # 设置滚动区域的内容
+        scroll_area.setWidget(scroll_content)
         
         # 将滚动区域添加到详细信息标签页
         details_layout.addWidget(scroll_area)

@@ -1,0 +1,16 @@
+Value Required TRUNK_ID (\d+)
+Value List MEMBER_PORTS (\S+)
+
+Start
+  ^Eth-Trunk${TRUNK_ID}'s state information is: -> Begin_Section
+
+Begin_Section
+  ^Local: -> Find_Ports
+
+Find_Ports
+  ^ActorPortName\s+Status -> Port_Lines
+
+Port_Lines
+  ^${MEMBER_PORTS}\s+Selected
+  ^Partner: -> Record Start
+  ^Eth-Trunk -> Record Start

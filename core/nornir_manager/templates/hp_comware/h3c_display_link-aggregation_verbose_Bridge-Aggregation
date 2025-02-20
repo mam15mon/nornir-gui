@@ -1,0 +1,11 @@
+Value Required AGGREGATE_INTERFACE (Bridge-Aggregation\d+)
+Value List PHYSICAL_PORTS ([A-Z]+\d+/\d+/\d+(?:\([R]\))?)
+
+Start
+  ^Aggregate Interface: ${AGGREGATE_INTERFACE} -> Get_Ports
+
+Get_Ports
+  ^  ${PHYSICAL_PORTS}\s+S\s+ -> Continue
+  ^Remote: -> Record Start
+
+EOF

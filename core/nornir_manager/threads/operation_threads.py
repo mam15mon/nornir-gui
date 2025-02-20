@@ -6,7 +6,7 @@ from ..operations.config_save import ConfigSave
 from ..operations.command_sender import CommandSender
 from ..operations.dnat_query import DnatQuery
 from ..operations.interface_query import InterfaceQuery
-from ..operations.mac_ip_query import MacIpQuery
+from core.nornir_manager.operations.mac_ip_query_new import MacIpQueryNew
 
 
 class TestThread(BaseOperationThread):
@@ -45,10 +45,10 @@ class InterfaceThread(BaseOperationThread):
         super().__init__(InterfaceQuery(), parent)
 
 
-class MacIpThread(BaseMacIpThread):
+class MacIpNewThread(BaseMacIpThread):
     """MAC-IP查询线程"""
     def __init__(self, parent=None):
-        super().__init__(MacIpQuery(), parent)
+        super().__init__(MacIpQueryNew(), parent)
 
 
 class CommandThread(BaseCommandThread):

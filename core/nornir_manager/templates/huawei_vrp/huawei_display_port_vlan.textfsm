@@ -1,0 +1,11 @@
+Value Required INTERFACE (\S+)
+Value Required LINK_TYPE (\S+|-)
+Value Required PVID (\d+)
+Value TRUNK_VLAN_LIST ([\d\s]+|-)
+
+Start
+  ^Port\s+Link Type\s+PVID\s+Trunk VLAN List\s*$$
+  ^-+
+  ^${INTERFACE}\s+${LINK_TYPE}\s+${PVID}\s+${TRUNK_VLAN_LIST}\s*$$ -> Record
+  ^\s*$$
+  ^. -> Error

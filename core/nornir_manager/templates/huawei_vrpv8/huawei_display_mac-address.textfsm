@@ -1,0 +1,21 @@
+Value DESTINATION_ADDRESS ([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})
+Value VLAN_ID (\d+)
+Value DESTINATION_PORT (\S+)
+Value TYPE (\S+)
+Value AGE (\d+)
+
+Start
+  ^MAC\s+Address -> Header
+  ^${DESTINATION_ADDRESS}\s+${VLAN_ID}/-(?:/-)?\s+${DESTINATION_PORT}\s+${TYPE}\s+${AGE} -> Record
+  ^Total\s+items
+  ^-+
+  ^\s*$$
+  ^Flags:
+  ^\s+#.* -> Start
+  ^BD\s+:
+  ^. -> Start
+
+Header
+  ^-+
+  ^${DESTINATION_ADDRESS}\s+${VLAN_ID}/-(?:/-)?\s+${DESTINATION_PORT}\s+${TYPE}\s+${AGE} -> Record
+  ^. -> Start

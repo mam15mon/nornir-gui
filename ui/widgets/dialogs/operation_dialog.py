@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                              QInputDialog, QLineEdit)
 from PySide6.QtCore import Qt
 from datetime import datetime
-from typing import List, Optional, Type, Dict, Any
+from typing import List, Optional, Type, Dict, Any, Callable
 import logging
 
 from core.nornir_manager.threads import (
@@ -15,7 +15,7 @@ from core.nornir_manager.threads import (
     BaseOperationThread,
     DnatThread,
     InterfaceThread,
-    MacIpThread
+    MacIpNewThread
 )
 from .command_dialog import CommandDialog
 from core.nornir_manager.operations.dnat_query import DnatQuery
@@ -64,7 +64,7 @@ class OperationDialog(QDialog):
         self.interface_btn.clicked.connect(self._on_interface_clicked)
         function_layout.addWidget(self.interface_btn)
 
-        # 查询MAC-IP按钮
+        # MAC-IP查询按钮
         self.mac_ip_btn = QPushButton("查询MAC-IP")
         self.mac_ip_btn.clicked.connect(self._on_mac_ip_clicked)
         function_layout.addWidget(self.mac_ip_btn)
@@ -185,8 +185,8 @@ class OperationDialog(QDialog):
         )
         
         if ok and mac_or_ip:
-            # 如果全是交换机设备，就启动操作
-            self._start_operation(MacIpThread, "查询MAC-IP", mac_or_ip=mac_or_ip)
+            # 启动MAC-IP查询操作
+            self._start_operation(MacIpNewThread, "查询MAC-IP", mac_or_ip=mac_or_ip)
         
     def _start_operation(self, thread_class: Type[BaseOperationThread], operation_name: str, **kwargs) -> None:
         """启动操作的通用方法"""

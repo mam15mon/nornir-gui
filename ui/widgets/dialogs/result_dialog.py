@@ -1,12 +1,108 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QTextBrowser, QTabWidget,
-                             QWidget, QTableWidget, QTableWidgetItem)
+                             QWidget, QTableWidget, QTableWidgetItem, QFrame)
 from datetime import datetime
 import os
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, Qt
 import re
 import subprocess
 import sys
+
+class DeviceResultWidget(QFrame):
+    """单个设备结果显示组件"""
+    
+    def __init__(self, device_name, result, parent=None):
+        super().__init__(parent)
+        self.device_name = device_name
+        self.result = result
+        self.full_text = result.get('result', '')
+        self.lines = self.full_text.split('\n') if self.full_text else []
+        self.current_line = 200  # 初始显示行数
+        
+        # 创建UI组件
+        self.text_browser = QTextBrowser()
+        self.line_info = QLabel()
+        
+        # 初始化UI
+        self.init_ui()
+        
+        # 设置超链接点击事件
+        self.text_browser.setOpenExternalLinks(True)
+        
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # 设备信息头部
+        header_layout = QHBoxLayout()
+        status = self.result.get('status', 'Unknown')
+        header_layout.addWidget(QLabel(f"设备: {self.device_name}"))
+        status_label = QLabel(f"状态: {status}")
+        status_label.setStyleSheet(f"color: {'green' if '成功' in status else 'red'};")
+        header_layout.addWidget(status_label)
+        
+        # 如果有输出文件，添加文件链接
+        output_file = self.result.get('output_file')
+        if output_file:
+            file_link = QLabel(f"文件: <a href='{QUrl.fromLocalFile(output_file).toString()}'>{os.path.basename(output_file)}</a>")
+            file_link.setOpenExternalLinks(True)
+            header_layout.addWidget(file_link)
+            
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+        
+        # 结果文本显示
+        self.text_browser.setReadOnly(True)
+        layout.addWidget(self.text_browser)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 显示行数信息
+        button_layout.addWidget(self.line_info)
+        
+        button_layout.addStretch()
+        
+        # 只有当总行数超过初始显示行数时才显示按钮
+        if len(self.lines) > self.current_line:
+            load_more_btn = QPushButton("加载更多(200行)")
+            load_more_btn.clicked.connect(self.load_more)
+            button_layout.addWidget(load_more_btn)
+            
+            load_all_btn = QPushButton("加载全部")
+            load_all_btn.clicked.connect(self.load_all)
+            button_layout.addWidget(load_all_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # 添加分割线
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(line)
+        
+        # 更新文本显示
+        self.update_text()
+        
+    def update_text(self):
+        """更新文本显示"""
+        displayed_lines = []
+        for line in self.lines[:self.current_line]:
+            # 跳过包含文件链接的行
+            if '输出文件:' not in line and 'file:///' not in line:
+                displayed_lines.append(line)
+        
+        self.text_browser.setText('\n'.join(displayed_lines))
+        self.line_info.setText(f"显示 {min(self.current_line, len(self.lines))}/{len(self.lines)} 行")
+        
+    def load_more(self):
+        """加载更多行"""
+        self.current_line += 200
+        self.update_text()
+        
+    def load_all(self):
+        """加载所有行"""
+        self.current_line = len(self.lines)
+        self.update_text()
 
 class ResultDialog(QDialog):
     """结果统计对话框"""
@@ -23,6 +119,7 @@ class ResultDialog(QDialog):
         self.operation_name = operation_name
         self.results = results
         self.start_time = start_time
+        self.overview_text = QTextBrowser()  # 创建概览文本浏览器
         self.init_ui()
         self.setup_hyperlink()
 
@@ -30,8 +127,6 @@ class ResultDialog(QDialog):
         """设置超链接点击事件"""
         self.overview_text.anchorClicked.connect(self.open_file)
         self.overview_text.setOpenLinks(False)
-        self.details_text.anchorClicked.connect(self.open_file)
-        self.details_text.setOpenLinks(False)
 
     def open_file(self, link):
         """打开文件"""
@@ -47,7 +142,7 @@ class ResultDialog(QDialog):
 
     def is_mac_ip_query(self, result_text: str) -> bool:
         """判断是否为MAC-IP查询操作"""
-        return any(keyword in result_text for keyword in ['MAC地址:', 'IP地址:', '接入接口:', '所属VLAN:'])
+        return any(keyword in result_text for keyword in ['MAC地址:', 'IP地址:', 'VLAN:', '接口:'])
 
     def format_overview_content(self, device_name, result):
         """格式化概览内容"""
@@ -59,12 +154,7 @@ class ResultDialog(QDialog):
         if not result_text:
             return ''
         
-        # MAC-IP查询结果的特殊处理
-        if self.is_mac_ip_query(result_text):
-            if '未找到MAC地址表项' in result_text or '未在ARP表中找到对应条目' in result_text:
-                return ''  # 不显示无结果的设备
-        
-        # 显示设备名称、状态和文件链接
+        # 显示设备名称和状态
         content = [
             f"设备: {device_name}",
             f"状态: <span style='color: {'green' if '成功' in status else 'red'};'>{status}</span>"
@@ -72,8 +162,7 @@ class ResultDialog(QDialog):
         
         # 如果有输出文件，添加文件链接
         if output_file:
-            file_url = QUrl.fromLocalFile(output_file).toString()
-            content.append(f"文件: <a href='{file_url}'>{os.path.basename(output_file)}</a>")
+            content.append(f"文件: <a href='{QUrl.fromLocalFile(output_file).toString()}'>{os.path.basename(output_file)}</a>")
         
         content.append("<hr>")
         return "<br>".join(content)
@@ -88,118 +177,19 @@ class ResultDialog(QDialog):
         if not result_text:
             return ''
             
-        # MAC-IP查询结果的特殊处理
-        if self.is_mac_ip_query(result_text):
-            if '未找到MAC地址表项' in result_text or '未在ARP表中找到对应条目' in result_text:
-                return ''  # 不显示无结果的设备
-            
-            # 分行处理MAC-IP查询结果
-            content = [
-                f"设备: {device_name}",
-                f"状态: {'<span style=\"color: green;\">' + status + '</span>' if '成功' in status else '<span style=\"color: red;\">' + status + '</span>'}",
-            ]
-            
-            # 如果有输出文件,添加文件链接
-            if output_file:
-                file_url = QUrl.fromLocalFile(output_file).toString()
-                content.append(f"文件: <a href='{file_url}'>{os.path.basename(output_file)}</a>")
-            
-            content.append("")  # 在设备信息后添加一个空行
-            
-            # 提取查询条件
-            query_match = re.search(r'查询条件: (.*?) 找到MAC地址:', result_text)
-            if query_match:
-                content.append(f"查询条件: {query_match.group(1)}")
-                content.append("")  # 空行
-                
-            # 提取命令信息
-            cmd_match = re.search(r'执行命令: (.*?) 详细结果:', result_text)
-            if cmd_match:
-                content.append("执行的命令:")
-                for cmd in cmd_match.group(1).split(', '):
-                    content.append(f"  {cmd}")
-                content.append("")  # 空行
-                
-            # 提取并格式化详细结果
-            content.append("详细结果:")
-            results_text = result_text.split('详细结果:')[1] if '详细结果:' in result_text else result_text
-            
-            # 分别处理每个MAC地址条目
-            mac_entries = re.findall(r'MAC地址:.*?(?=MAC地址:|$)', results_text, re.DOTALL)
-            if not mac_entries:  # 如果没有匹配到多条目格式，将整个结果作为一个条目
-                mac_entries = [results_text]
-            
-            for entry in mac_entries:
-                entry = entry.strip()
-                if not entry:
-                    continue
-                
-                # 提取并格式化每个字段
-                mac_match = re.search(r'MAC地址: ([0-9a-fA-F-]+)', entry)
-                ip_match = re.search(r'IP地址: ([^接]+)', entry)
-                interface_match = re.search(r'接入接口: ([^所]+)', entry)
-                vlan_match = re.search(r'所属VLAN: (\d+)', entry)
-                
-                if mac_match:
-                    content.append(f"  MAC地址: {mac_match.group(1)}")
-                if ip_match:
-                    # 去重IP地址
-                    ips = list(set(ip_match.group(1).strip().split(', ')))
-                    content.append(f"  IP地址: {', '.join(ips)}")
-                if interface_match:
-                    content.append(f"  接入接口: {interface_match.group(1).strip()}")
-                if vlan_match:
-                    content.append(f"  所属VLAN: {vlan_match.group(1)}")
-                content.append("")  # 每个条目之间添加空行
-        else:
-            # 其他操作的通用处理
-            content = [
-                f"设备: {device_name}",
-                f"状态: {'<span style=\"color: green;\">' + status + '</span>' if '成功' in status else '<span style=\"color: red;\">' + status + '</span>'}",
-            ]
-            
-            # 如果有输出文件,添加文件链接
-            if output_file:
-                file_url = QUrl.fromLocalFile(output_file).toString()
-                content.append(f"文件: <a href='{file_url}'>{os.path.basename(output_file)}</a>")
-            
-            content.append("")  # 在设备信息后添加一个空行
-            
-            # 添加完整的结果内容
-            if result_text:
-                # 尝试提取和格式化命令输出
-                if isinstance(result_text, str):
-                    # 分析结果文本结构
-                    lines = result_text.split('\n')
-                    current_section = None
-                    command_output = []
-                    
-                    for line in lines:
-                        line = line.strip()
-                        if not line:
-                            continue
-                            
-                        if '执行的命令:' in line:
-                            current_section = 'commands'
-                            content.append("执行的命令:")
-                            continue
-                        elif '命令: ' in line:
-                            current_section = 'output'
-                            command = line.replace('命令: ', '').strip()
-                            content.append("")  # 空行
-                            content.append(f"命令: {command}")
-                            content.append("输出:")
-                            continue
-                        elif '命令输出:' in line:
-                            current_section = 'output'
-                            continue
-                            
-                        if current_section == 'commands':
-                            content.append(f"  {line}")
-                        elif current_section == 'output':
-                            content.append(f"  {line}")
-                else:
-                    content.append(str(result_text))
+        # 分行处理结果
+        content = [
+            f"设备: {device_name}",
+            f"状态: {'<span style=\"color: green;\">' + status + '</span>' if '成功' in status else '<span style=\"color: red;\">' + status + '</span>'}",
+        ]
+        
+        content.append("")  # 在设备信息后添加一个空行
+        
+        # 添加详细结果
+        content.append("详细结果:")
+        for line in result_text.split('\n'):
+            if line.strip():
+                content.append(f"  {line.strip()}")
         
         content.append("<hr>")  # 使用与概览相同的分割线
         return "<br>".join(content)
@@ -207,7 +197,7 @@ class ResultDialog(QDialog):
     def init_ui(self):
         """初始化UI"""
         self.setWindowTitle(f"{self.operation_name} - 结果")
-        self.resize(800, 600)
+        self.resize(1000, 800)  # 增加默认窗口大小
         
         main_layout = QVBoxLayout(self)
         tab_widget = QTabWidget()
@@ -219,24 +209,12 @@ class ResultDialog(QDialog):
         # 统计信息
         stats_layout = QHBoxLayout()
         
-        # 根据操作类型过滤有效结果
-        valid_results = []
-        for result in self.results.values():
-            result_text = result.get('result', '')
-            if not result_text:
-                continue
-                
-            if self.is_mac_ip_query(result_text):
-                if '未找到MAC地址表项' not in result_text and '未在ARP表中找到对应条目' not in result_text:
-                    valid_results.append(result)
-            else:
-                valid_results.append(result)
-        
-        total_devices = len(valid_results)
-        success_count = sum(1 for result in valid_results if '成功' in result.get('status', ''))
+        # 统计所有设备的结果
+        total_devices = len(self.results)
+        success_count = sum(1 for result in self.results.values() if '成功' in result.get('status', ''))
         failed_count = total_devices - success_count
         
-        stats_layout.addWidget(QLabel(f"有效结果设备数: {total_devices}"))
+        stats_layout.addWidget(QLabel(f"总设备数: {total_devices}"))
         stats_layout.addWidget(QLabel(f"成功: {success_count}"))
         stats_layout.addWidget(QLabel(f"失败: {failed_count}"))
         
@@ -246,11 +224,10 @@ class ResultDialog(QDialog):
         
         overview_layout.addLayout(stats_layout)
         
-        # 概览显示
-        self.overview_text = QTextBrowser()
+        # 概览显示 - 显示所有设备
         self.overview_text.setReadOnly(True)
         
-        # 格式化概览内容
+        # 格式化概览内容 - 显示所有设备
         overview_content = []
         for device_name, result in self.results.items():
             content = self.format_overview_content(device_name, result)
@@ -265,17 +242,35 @@ class ResultDialog(QDialog):
         # 详细信息选项卡
         details_tab = QWidget()
         details_layout = QVBoxLayout(details_tab)
-        self.details_text = QTextBrowser()
-        self.details_text.setReadOnly(True)
         
-        details_content = []
+        # 创建滚动区域容器
+        scroll_area = QWidget()
+        scroll_layout = QVBoxLayout(scroll_area)
+        
+        # 过滤结果：对于MAC-IP查询只保留有效结果，其他命令显示所有结果
+        valid_results = {}
         for device_name, result in self.results.items():
-            content = self.format_details_content(device_name, result)
-            if content:  # 只添加有内容的结果
-                details_content.append(content)
+            result_text = result.get('result', '')
+            if not result_text:
+                continue
+                
+            if self.is_mac_ip_query(result_text):
+                # 对于MAC-IP查询，只保留找到MAC地址的设备
+                if 'MAC地址:' in result_text and '未找到' not in result_text:
+                    valid_results[device_name] = result
+            else:
+                # 其他命令的结果全部显示
+                valid_results[device_name] = result
         
-        self.details_text.setHtml("<br>".join(details_content))
-        details_layout.addWidget(self.details_text)
+        # 为每个设备创建独立的结果显示组件
+        for device_name, result in valid_results.items():
+            device_widget = DeviceResultWidget(device_name, result)
+            scroll_layout.addWidget(device_widget)
+        
+        scroll_layout.addStretch()
+        
+        # 将滚动区域添加到详细信息标签页
+        details_layout.addWidget(scroll_area)
         
         tab_widget.addTab(details_tab, "详细信息")
         main_layout.addWidget(tab_widget)

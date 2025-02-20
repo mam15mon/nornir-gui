@@ -1,0 +1,6 @@
+Value INTERFACE (\S+)
+Value PVID (\d+)
+Value VLANS ([\d\-\,\s]+)
+
+Start
+  ^${INTERFACE}\s+${PVID}\s+${VLANS}\s*$$ -> Record

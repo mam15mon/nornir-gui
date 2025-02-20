@@ -1,0 +1,29 @@
+Value IP_ADDRESS (\S+)
+Value MAC_ADDRESS ([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})
+Value EXPIRE (\d+|)
+Value TYPE ([DSIORD])
+Value VLAN_ID (\d+|)
+Value INTERFACE (\S+)
+Value VPN_INSTANCE (\S*)
+
+Start
+  # 跳过标题行
+  ^ARP Entry Types:.+ -> Headers
+
+Headers
+  # 跳过表头和分隔线
+  ^IP ADDRESS\s+MAC ADDRESS\s+EXP\(M\)\s+TYPE\/VLAN\s+INTERFACE\s+VPN-INSTANCE\s*$$ -> Entries
+  ^-+$$ -> Entries
+
+Entries
+  # 匹配带 VLAN 的 ARP 条目
+  ^${IP_ADDRESS}\s+${MAC_ADDRESS}\s+${EXPIRE}\s+${TYPE}\/${VLAN_ID}\s+${INTERFACE}\s+${VPN_INSTANCE}\s*$$ -> Record
+  # 匹配不带 VLAN 的 ARP 条目（带过期时间）
+  ^${IP_ADDRESS}\s+${MAC_ADDRESS}\s+${EXPIRE}\s+${TYPE}\s+${INTERFACE}\s+${VPN_INSTANCE}\s*$$ -> Record
+  # 匹配不带 VLAN 和过期时间的 ARP 条目
+  ^${IP_ADDRESS}\s+${MAC_ADDRESS}\s+${TYPE}\s+${INTERFACE}\s+${VPN_INSTANCE}\s*$$ -> Record
+  ^Total:.* -> End
+  ^-.* -> Entries
+  ^\s*$$ -> Entries
+
+End

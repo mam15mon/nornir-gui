@@ -48,13 +48,29 @@ class DeviceImporter:
             df = pd.read_excel(file_path)
             
             # 验证列名
-            if not all(col in df.columns for col in DeviceImporter.TEMPLATE_COLUMNS):
-                QMessageBox.warning(None, "导入失败", "Excel文件格式不正确，请使用正确的模板")
+            missing_columns = [col for col in DeviceImporter.TEMPLATE_COLUMNS if col not in df.columns]
+            if missing_columns:
+                QMessageBox.warning(None, "导入失败", f"Excel文件格式不正确，缺少以下列：\n{', '.join(missing_columns)}\n\n请使用正确的模板")
                 return False, 0
             
             # 转换为设备数据
             devices = []
-            for _, row in df.iterrows():
+            row_errors = []
+            
+            for idx, row in df.iterrows():
+                # 先检查必填字段
+                required_fields = [('设备名称', 'name'), ('主机名/IP', 'hostname'), ('平台类型', 'platform')]
+                row_valid = True
+                
+                for field_name, _ in required_fields:
+                    if pd.isna(row[field_name]) or str(row[field_name]).strip() == '':
+                        row_errors.append(f"第{idx+2}行: 缺少必填字段 '{field_name}'")
+                        row_valid = False
+                        break
+                
+                if not row_valid:
+                    continue
+                
                 device = {
                     'name': row['设备名称'],
                     'hostname': row['主机名/IP'],
@@ -68,9 +84,20 @@ class DeviceImporter:
                 }
                 devices.append(device)
             
+            # 如果所有行都有错误，直接显示错误并返回
+            if not devices and row_errors:
+                error_message = "导入失败，数据验证错误：\n" + "\n".join(row_errors)
+                QMessageBox.warning(None, "数据验证错误", error_message)
+                return False, 0
+            
             # 使用设备管理器的批量方法
             device_manager = DeviceManager(db)
             success_count, update_count = device_manager.batch_add_or_update_devices(devices)
+            
+            # 合并所有错误信息
+            if row_errors:
+                combined_message = f"处理完成\n新增: {success_count} 个\n更新: {update_count} 个\n\n以下行数据有错误:\n" + "\n".join(row_errors)
+                QMessageBox.warning(None, "部分数据导入成功", combined_message)
             
             return (success_count + update_count) > 0, success_count + update_count
             

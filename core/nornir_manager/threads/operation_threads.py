@@ -6,7 +6,7 @@ from ..operations.config_save import ConfigSave
 from ..operations.command_sender import CommandSender
 from ..operations.dnat_query import DnatQuery
 from ..operations.interface_query import InterfaceQuery
-from core.nornir_manager.operations.mac_ip_query_new import MacIpQueryNew
+from core.nornir_manager.operations.mac_ip_query import MacIpQueryNew
 
 
 class TestThread(BaseOperationThread):

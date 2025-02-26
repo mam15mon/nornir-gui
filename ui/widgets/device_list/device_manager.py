@@ -142,6 +142,13 @@ class DeviceManager(QObject):
             if not device.get(field):
                 return False, f"缺少必要字段: {field_name}"
         
+        # 验证设备名称格式
+        name = device.get('name', '')
+        # 检查设备名称是否包含无效字符
+        invalid_name_chars = set("<>\"'();$|[]{}\\")  # 允许使用&符号，因为实际数据中有使用
+        if any(c in invalid_name_chars for c in name):
+            return False, f"设备名称包含无效字符: {name}"
+        
         # 验证端口范围
         port = device.get('port', 22)
         try:
@@ -173,7 +180,7 @@ class DeviceManager(QObject):
         else:
             # 非IP格式，认为是域名或主机名，做简单的有效性检查
             # 检查是否包含无效字符
-            invalid_chars = set("<>\"'&;()$|[]{}\\")
+            invalid_chars = set("<>\"'();$|[]{}\\")  # 允许使用&符号
             if any(c in invalid_chars for c in hostname):
                 return False, f"主机名包含无效字符: {hostname}"
                 
@@ -204,37 +211,90 @@ class DeviceManager(QObject):
         logger.info(f"开始批量处理 {len(devices)} 个设备")
         error_messages = []
         valid_devices = []
+        
+        # 检查重复名称
+        name_counts = {}
+        duplicate_names = []
+        duplicate_details = {}
+        
+        # 确保比较时去除空白字符
+        for idx, device in enumerate(devices):
+            name = device.get('name', '').strip() if device.get('name') else ''
+            if name:
+                if name not in duplicate_details:
+                    duplicate_details[name] = []
+                duplicate_details[name].append(idx + 1)  # 记录设备在列表中的序号
+                name_counts[name] = name_counts.get(name, 0) + 1
+        
+        # 记录所有出现次数及重复项
+        logger.debug(f"设备名称计数: {name_counts}")
+        
+        # 过滤出只有多个序号的项（即重复项）
+        duplicate_details = {name: indices for name, indices in duplicate_details.items() if len(indices) > 1}
+        
+        for name, count in name_counts.items():
+            if count > 1:
+                duplicate_names.append(name)
+                logger.warning(f"发现重复的设备名称: {name}, 出现 {count} 次，位于索引 {duplicate_details[name]}")
+                
+        if duplicate_names:
+            # 格式化显示重复项及其序号
+            detail_msg = []
+            for name, indices in duplicate_details.items():
+                detail_msg.append(f"设备名称 '{name}' 在以下位置出现: {', '.join(map(str, indices))}")
+            
+            error_msg = f"导入数据中存在重复的设备名称:\n" + "\n".join(detail_msg)
+            logger.error(error_msg)
+            QMessageBox.warning(parent, "数据错误", error_msg)
+            return 0, 0
 
         # 验证数据
         for device in devices:
             is_valid, error_msg = self._validate_device_data(device)
             if is_valid:
-                valid_devices.append(device)
+                # 检查名称是否已存在于数据库中
+                name = device.get('name')
+                existing_device = self.db.get_host(name)
+                if existing_device and not getattr(parent, 'is_update_mode', False):  # 如果不是显式的更新模式
+                    logger.info(f"跳过已存在的设备名称: {name}")
+                    error_messages.append(f"设备名称已存在: {name}")
+                else:
+                    valid_devices.append(device)
             else:
+                logger.warning(f"设备数据验证失败: {device.get('name', 'Unknown')} - {error_msg}")
                 error_messages.append(f"设备 {device.get('name', 'Unknown')} 数据无效: {error_msg}")
 
         # 如果没有有效设备但有错误信息，直接显示错误
         if not valid_devices and error_messages:
             message = "数据验证失败，无法导入设备:\n" + "\n".join(error_messages)
+            logger.error(message)
             QMessageBox.warning(parent, "验证失败", message)
             return 0, 0
             
         # 批量处理有效的设备
-        success_count, update_count = self.db.batch_add_or_update_hosts(valid_devices)
-
-        # 显示结果
-        message = f"处理完成\n新增: {success_count} 个\n更新: {update_count} 个"
-        if error_messages:
-            message += "\n\n验证错误:\n" + "\n".join(error_messages)
-        
-        if error_messages:
-            QMessageBox.warning(parent, "完成", message)
-        else:
-            QMessageBox.information(parent, "完成", message)
+        try:
+            success_count, update_count = self.db.batch_add_or_update_hosts(valid_devices)
+            logger.info(f"批量处理完成，新增: {success_count}，更新: {update_count}")
             
-        # 发送更新信号
-        if success_count > 0 or update_count > 0:
-            self.device_updated.emit()
-            event_bus.device_list_changed.emit()
+            # 显示结果
+            message = f"处理完成\n新增: {success_count} 个\n更新: {update_count} 个"
+            if error_messages:
+                message += "\n\n验证错误:\n" + "\n".join(error_messages)
             
-        return success_count, update_count 
+            if error_messages:
+                QMessageBox.warning(parent, "完成", message)
+            else:
+                QMessageBox.information(parent, "完成", message)
+                
+            # 发送更新信号
+            if success_count > 0 or update_count > 0:
+                self.device_updated.emit()
+                event_bus.device_list_changed.emit()
+                
+            return success_count, update_count
+            
+        except Exception as e:
+            error_msg = f"批量处理设备失败: {str(e)}"
+            logger.error(error_msg)
+            QMessageBox.critical(parent, "数据库错误", error_msg)
+            return 0, 0 

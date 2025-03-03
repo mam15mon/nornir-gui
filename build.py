@@ -29,6 +29,13 @@ def clean_build_files() -> None:
             print(f"   删除缓存: {cache_dir}")
             shutil.rmtree(cache_dir)
 
+def parse_requirement(req_str):
+    """解析需求字符串，分离包名和版本信息"""
+    parts = req_str.split('==')
+    if len(parts) > 1:
+        return parts[0].lower(), parts[1]
+    return req_str.lower(), None
+
 def get_installed_packages() -> Dict[str, str]:
     """获取已安装的包列表"""
     output = subprocess.check_output([
@@ -71,13 +78,19 @@ def install_requirements() -> None:
     # 添加构建所需的额外依赖
     requirements.append("pyinstaller")
     
-    # 只安装缺失的包
+    # 检查并安装/更新每个依赖
     for req in requirements:
-        req_lower = req.lower()
-        if req_lower not in installed_packages:
+        pkg_name, pkg_version = parse_requirement(req)
+        
+        if pkg_name not in installed_packages:
+            # 包不存在，安装它
+            install_package(req)
+        elif pkg_version and installed_packages[pkg_name] != pkg_version:
+            # 版本不匹配，更新到指定版本
+            print(f"{pkg_name} 版本不匹配 (当前: {installed_packages[pkg_name]}, 需要: {pkg_version})")
             install_package(req)
         else:
-            print(f"{req} 已安装 (版本: {installed_packages[req_lower]})")
+            print(f"{pkg_name} 已安装 (版本: {installed_packages[pkg_name]})")
 
 def verify_and_convert_icon() -> str:
     """验证图标文件并返回路径"""
@@ -163,6 +176,35 @@ def copy_to_release(exe_name: str) -> None:
     
     shutil.copy2(src_path, release_dir)
 
+def publish_to_github(version):
+    """将构建好的文件发布到GitHub"""
+    print("\n🚀 发布到GitHub...")
+    
+    # 确保release目录中有可执行文件
+    exe_path = Path('release') / 'nornir_gui.exe'
+    if not exe_path.exists():
+        print("错误: 找不到要发布的可执行文件")
+        return False
+    
+    try:
+        # 创建版本标签
+        subprocess.run(["git", "tag", version])
+        subprocess.run(["git", "push", "origin", version])
+        
+        # 使用gh cli创建release
+        subprocess.run([
+            "gh", "release", "create", version,
+            "--title", f"Nornir GUI {version}",
+            "--notes", f"Nornir GUI {version} 发布版本",
+            str(exe_path)
+        ])
+        
+        print(f"✅ 成功发布 {version} 到GitHub")
+        return True
+    except Exception as e:
+        print(f"❌ 发布失败: {str(e)}")
+        return False
+
 def build_exe() -> None:
     """构建可执行文件"""
     # 确保安装了依赖
@@ -188,6 +230,12 @@ def build_exe() -> None:
     clean_build_files()
     
     print("\n🎉 构建完成！发布包在 release 目录中")
+    
+    # 询问是否发布
+    response = input("\n是否发布到GitHub? (y/n): ")
+    if response.lower() == 'y':
+        version = input("输入版本号 (例如 v1.0.0): ")
+        publish_to_github(version)
 
 if __name__ == '__main__':
     build_exe()

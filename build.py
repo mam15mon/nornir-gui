@@ -176,31 +176,134 @@ def copy_to_release(exe_name: str) -> None:
     
     shutil.copy2(src_path, release_dir)
 
-def publish_to_github(version):
-    """将构建好的文件发布到GitHub"""
+def check_gh_cli() -> bool:
+    """检查是否安装了GitHub CLI"""
+    try:
+        # 首先检查gh命令
+        result = subprocess.run(["gh", "--version"], capture_output=True)
+        return True
+    except FileNotFoundError:
+        print("❌ 未找到GitHub CLI工具，正在检查安装状态...")
+        try:
+            # 检查是否已通过winget安装
+            result = subprocess.run(
+                ["winget", "list", "--name", "GitHub"], 
+                capture_output=True, 
+                text=True
+            )
+            
+            if "GitHub CLI" in result.stdout:
+                print("💡 GitHub CLI 已经安装，但可能需要重启终端或重启电脑")
+                print("   请尝试:")
+                print("   1. 关闭当前终端，打开新终端")
+                print("   2. 如果还不行，请重启电脑")
+                print("   3. 重启后运行 'gh auth login' 进行身份验证")
+            else:
+                print("❌ GitHub CLI 未安装。请使用以下命令安装:")
+                print("   winget install GitHub.cli")
+                print("\n安装后:")
+                print("   1. 关闭当前终端，打开新终端")
+                print("   2. 运行 'gh auth login' 进行身份验证")
+        except FileNotFoundError:
+            print("❌ 未找到 winget 命令。请手动安装 GitHub CLI:")
+            print("   1. 访问: https://cli.github.com/")
+            print("   2. 下载并安装GitHub CLI")
+            print("   3. 运行 'gh auth login' 进行身份验证")
+        return False
+
+def publish_to_github(version: str = None, title: str = None, notes: str = None, draft: bool = False, pre_release: bool = False) -> bool:
+    """将构建好的文件发布到GitHub
+    
+    Args:
+        version: 版本号，例如 v0.1.1
+        title: 发布标题，如果不指定则使用版本号
+        notes: 发布说明，如果不指定则使用默认文本
+        draft: 是否创建为草稿版本
+        pre_release: 是否标记为预发布版本
+    """
     print("\n🚀 发布到GitHub...")
+    
+    # 检查gh命令行工具
+    if not check_gh_cli():
+        return False
     
     # 确保release目录中有可执行文件
     exe_path = Path('release') / 'nornir_gui.exe'
     if not exe_path.exists():
-        print("错误: 找不到要发布的可执行文件")
+        print("❌ 错误: 找不到要发布的可执行文件")
         return False
     
     try:
-        # 创建版本标签
-        subprocess.run(["git", "tag", version])
-        subprocess.run(["git", "push", "origin", version])
+        # 获取所有标签
+        tags = subprocess.check_output(["git", "tag"]).decode().split()
         
-        # 使用gh cli创建release
-        subprocess.run([
-            "gh", "release", "create", version,
-            "--title", f"Nornir GUI {version}",
-            "--notes", f"Nornir GUI {version} 发布版本",
-            str(exe_path)
-        ])
+        # 如果没有指定版本号，列出现有版本并要求输入
+        if not version:
+            if tags:
+                print("\n现有版本:")
+                for tag in sorted(tags):
+                    print(f"  {tag}")
+            
+            while True:
+                version = input("\n请输入新的版本号 (例如 v0.1.1): ").strip()
+                if not version:
+                    print("❌ 版本号不能为空")
+                    continue
+                if not version.startswith('v'):
+                    print("❌ 版本号必须以 'v' 开头")
+                    continue
+                if version in tags:
+                    print(f"❌ 版本 {version} 已存在")
+                    continue
+                break
+        
+        # 如果没有指定标题，使用默认标题
+        if not title:
+            title = f"Nornir GUI {version}"
+        
+        # 如果没有指定说明，使用默认说明
+        if not notes:
+            notes = f"Nornir GUI {version} 发布版本"
+        
+        # 创建版本标签
+        print(f"📌 创建标签 {version}...")
+        subprocess.run(["git", "tag", version], check=True)
+        subprocess.run(["git", "push", "origin", version], check=True)
+        
+        # 构建发布命令
+        cmd = [
+            "gh", "release", "create",
+            version,
+            "--title", title,
+            "--notes", notes,
+        ]
+        
+        # 添加可选参数
+        if draft:
+            cmd.append("--draft")
+        if pre_release:
+            cmd.append("--prerelease")
+            
+        # 添加文件
+        cmd.append(str(exe_path))
+        
+        # 创建发布
+        print("📦 创建发布版本...")
+        subprocess.run(cmd, check=True)
         
         print(f"✅ 成功发布 {version} 到GitHub")
         return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 发布失败: 命令执行错误 - {str(e)}")
+        # 清理失败的tag
+        try:
+            subprocess.run(["git", "tag", "-d", version])
+            subprocess.run(["git", "push", "origin", ":refs/tags/" + version])
+            print(f"🧹 已清理失败的标签 {version}")
+        except:
+            pass
+        return False
     except Exception as e:
         print(f"❌ 发布失败: {str(e)}")
         return False
@@ -238,4 +341,55 @@ def build_exe() -> None:
         publish_to_github(version)
 
 if __name__ == '__main__':
-    build_exe()
+    # 解析命令行参数
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'build':
+            build_exe()
+        elif sys.argv[1] == 'publish':
+            # 获取可选参数
+            version = None
+            title = None
+            notes = None
+            draft = False
+            pre_release = False
+            
+            # 解析参数
+            i = 2
+            while i < len(sys.argv):
+                arg = sys.argv[i]
+                if arg == '--version':
+                    i += 1
+                    if i < len(sys.argv):
+                        version = sys.argv[i]
+                elif arg == '--title':
+                    i += 1
+                    if i < len(sys.argv):
+                        title = sys.argv[i]
+                elif arg == '--notes':
+                    i += 1
+                    if i < len(sys.argv):
+                        notes = sys.argv[i]
+                elif arg == '--draft':
+                    draft = True
+                elif arg == '--pre-release':
+                    pre_release = True
+                i += 1
+            
+            publish_to_github(version, title, notes, draft, pre_release)
+        elif sys.argv[1] == 'all':
+            build_exe()
+            publish_to_github()
+        else:
+            print("用法:")
+            print("  python build.py build          - 仅构建")
+            print("  python build.py publish        - 仅发布")
+            print("  python build.py all           - 构建并发布")
+            print("\n发布参数:")
+            print("  --version <版本号>            - 指定版本号")
+            print("  --title <标题>               - 指定发布标题")
+            print("  --notes <说明>               - 指定发布说明")
+            print("  --draft                     - 创建为草稿版本")
+            print("  --pre-release               - 标记为预发布版本")
+    else:
+        # 默认行为：仅构建
+        build_exe()

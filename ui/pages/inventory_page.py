@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QGroupBox)
+                             QGroupBox, QLabel, QFrame, QStatusBar)
 from PySide6.QtCore import Qt
 
 from ..widgets.device_list.device_table import DeviceTable
@@ -83,6 +83,22 @@ class InventoryPage(QWidget):
         self.device_table.device_double_clicked.connect(self.on_device_double_clicked)
         self.device_table.devices_checked.connect(self.on_devices_checked)
         layout.addWidget(self.device_table)
+        
+        # 添加状态栏
+        self.status_bar = QStatusBar()
+        self.status_bar.setSizeGripEnabled(False)  # 禁用右下角大小调整控件
+        layout.addWidget(self.status_bar)
+        
+        # 状态栏标签
+        self.device_stats_label = QLabel("总设备: 0 | 已选择: 0")
+        self.status_bar.addWidget(self.device_stats_label)
+        
+        # 连接设备表格的stats_changed信号
+        self.device_table.stats_changed.connect(self.update_status_bar)
+
+    def update_status_bar(self, total_devices, checked_devices):
+        """更新状态栏信息"""
+        self.device_stats_label.setText(f"总设备: {total_devices} | 已选择: {checked_devices}")
 
     def load_data(self):
         """加载设备数据"""

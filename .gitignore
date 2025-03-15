@@ -11,6 +11,14 @@ logs/
 # excel文件
 *.xlsx
 
+#二进制文件
+*.bin
+*.exe
+*.dll
+*.so
+*.dylib
+
+
 # 操作记录和存档
 backup/
 

@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QTextEdit, QRadioButton,
                              QButtonGroup, QGroupBox, QCheckBox, QTableWidget,
-                             QTableWidgetItem, QHeaderView, QWidget)
+                             QTableWidgetItem, QHeaderView, QWidget, QMessageBox)
 from PySide6.QtCore import Qt
 
 class CommandDialog(QDialog):
@@ -170,6 +170,21 @@ class CommandDialog(QDialog):
             for row in range(self.command_table.rowCount()):
                 cmd_item = self.command_table.item(row, 0)
                 expect_item = self.command_table.item(row, 1)
+                
+                # 非timing模式下检查命令和期望值是否都已填写
+                if not self.use_timing_check.isChecked():
+                    cmd_text = cmd_item.text().strip() if cmd_item else ""
+                    expect_text = expect_item.text().strip() if expect_item else ""
+                    
+                    if not cmd_text or not expect_text:
+                        QMessageBox.warning(
+                            self,
+                            "输入错误", 
+                            f"第 {row+1} 行的命令和期望响应都不能为空！",
+                            QMessageBox.Ok
+                        )
+                        return
+                
                 if cmd_item and cmd_item.text().strip():
                     cmd = cmd_item.text().strip()
                     if self.use_timing_check.isChecked():

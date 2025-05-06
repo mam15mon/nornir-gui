@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.operation_page, "设备操作")
 
         self.device_inspection_page = DeviceInspectionPage()
-        self.tab_widget.addTab(self.device_inspection_page, "设备检测")
+        self.tab_widget.addTab(self.device_inspection_page, "巡检结果分析")
 
         self.inventory_page = InventoryPage(self.db, self)
         self.tab_widget.addTab(self.inventory_page, "设备库存管理")

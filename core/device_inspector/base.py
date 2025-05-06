@@ -1,6 +1,7 @@
 import re
 import os
-from typing import Dict, Optional, List
+import concurrent.futures
+from typing import Dict, List
 from abc import ABC, abstractmethod
 
 class DeviceInspector(ABC):
@@ -107,7 +108,7 @@ class DeviceInspector(ABC):
 
     @staticmethod
     def read_files_in_directory(directory_path: str) -> List[Dict]:
-        """读取目录下的所有文件并执行检测
+        """读取目录下的所有文件并执行检测 (单线程版本)
 
         Args:
             directory_path: 要处理的目录路径
@@ -143,6 +144,94 @@ class DeviceInspector(ABC):
 
                 except Exception as e:
                     print(f"无法读取文件 {file_path}: {e}")
+
+        return results
+
+    @staticmethod
+    def process_file(file_path: str) -> Dict:
+        """处理单个文件并返回检测结果
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            Dict: 文件检测结果
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+                # 检测设备类型
+                device_type = DeviceInspector.detect_device_type(content)
+                print(f"文件: {file_path}, 检测到设备类型: {device_type}")
+
+                # 创建对应的检测器
+                inspector = DeviceInspector.create_inspector(device_type)
+
+                if inspector:
+                    # 执行检测
+                    result = inspector.inspect_all(content)
+                    return {
+                        "file_path": file_path,
+                        "device_type": device_type,
+                        "results": result,
+                        "success": True
+                    }
+                else:
+                    print(f"设备非华为、H3C设备: {file_path}")
+                    return {
+                        "file_path": file_path,
+                        "device_type": "unknown",
+                        "success": False,
+                        "error": "不支持的设备类型"
+                    }
+
+        except Exception as e:
+            error_msg = f"无法读取文件 {file_path}: {e}"
+            print(error_msg)
+            return {
+                "file_path": file_path,
+                "device_type": "unknown",
+                "success": False,
+                "error": error_msg
+            }
+
+    @staticmethod
+    def read_files_with_threadpool(directory_path: str, max_workers: int = None) -> List[Dict]:
+        """使用线程池读取目录下的所有文件并执行检测
+
+        Args:
+            directory_path: 要处理的目录路径
+            max_workers: 最大工作线程数，默认为None（由系统决定）
+
+        Returns:
+            List[Dict]: 每个文件的检测结果列表
+        """
+        # 收集所有文件路径
+        file_paths = []
+        for root, _, files in os.walk(directory_path):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                file_paths.append(file_path)
+
+        # 如果没有文件，直接返回空列表
+        if not file_paths:
+            return []
+
+        # 使用线程池并行处理文件
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_file = {
+                executor.submit(DeviceInspector.process_file, file_path): file_path
+                for file_path in file_paths
+            }
+
+            # 收集结果（按完成顺序）
+            for future in concurrent.futures.as_completed(future_to_file):
+                result = future.result()
+                if result.get("success", False):
+                    results.append(result)
 
         return results
 

@@ -44,7 +44,7 @@
 - Python 3.12 或更高版本
 - 支持的操作系统：
   - Windows 11 主要使用的版本
-  - macOS 测试了，感觉没windows好用
+  - macOS 测试了能用
 
 ## 快速开始
 

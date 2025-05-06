@@ -1,12 +1,14 @@
+import re
+import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QFileDialog, QLabel, QProgressBar,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QTabWidget, QTreeWidget, QTreeWidgetItem, QGroupBox, QApplication,
-    QAbstractItemView, QMenu
+    QTabWidget, QTreeWidget, QTreeWidgetItem, QGroupBox,
+    QAbstractItemView, QMenu, QTextBrowser
 )
 from PySide6.QtCore import QThread, Signal, QSize, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QPalette, QAction
+from PySide6.QtGui import QColor, QFont, QAction
 from core.device_inspector import DeviceInspector
 
 class InspectionWorker(QThread):
@@ -15,17 +17,53 @@ class InspectionWorker(QThread):
     result = Signal(dict)
     finished = Signal()
     error = Signal(str)
+    file_count = Signal(int)  # 新增信号：文件总数
 
-    def __init__(self, directory_path: str):
+    def __init__(self, directory_path: str, max_workers: int = None):
         super().__init__()
         self.directory_path = directory_path
+        self.max_workers = max_workers
+        self.processed_count = 0
+        self.total_files = 0
 
     def run(self):
         try:
-            results = DeviceInspector.read_files_in_directory(self.directory_path)
-            for i, result in enumerate(results):
-                self.result.emit(result)
-                self.progress.emit(int((i + 1) / len(results) * 100))
+            # 首先计算文件总数
+            file_paths = []
+            for root, _, files in os.walk(self.directory_path):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    file_paths.append(file_path)
+
+            self.total_files = len(file_paths)
+            self.file_count.emit(self.total_files)
+
+            if self.total_files == 0:
+                self.finished.emit()
+                return
+
+            # 使用线程池处理文件
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                # 创建一个字典，将 Future 对象映射到文件路径
+                future_to_file = {
+                    executor.submit(DeviceInspector.process_file, file_path): file_path
+                    for file_path in file_paths
+                }
+
+                # 处理完成的任务
+                for future in concurrent.futures.as_completed(future_to_file):
+                    result = future.result()
+                    self.processed_count += 1
+
+                    # 更新进度
+                    progress_value = int(self.processed_count / self.total_files * 100)
+                    self.progress.emit(progress_value)
+
+                    # 如果处理成功，发送结果
+                    if result.get("success", False):
+                        self.result.emit(result)
+
             self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
@@ -35,53 +73,19 @@ class DeviceInspectionPage(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.is_dark_theme = self.detect_dark_theme()
         self.init_ui()
-
-    def detect_dark_theme(self):
-        """检测是否为暗色主题"""
-        app = QApplication.instance()
-        if app:
-            palette = app.palette()
-            bg_color = palette.color(QPalette.Window)
-            # 如果背景色较暗，则认为是暗色主题
-            return bg_color.lightness() < 128
-        return False
 
     def init_ui(self):
         main_layout = QVBoxLayout()
 
-        # 根据主题设置样式
-        if self.is_dark_theme:
-            # 暗色主题样式
-            select_btn_style = "background-color: #388E3C; color: white; font-weight: bold;"
-            start_btn_style = "background-color: #1976D2; color: white; font-weight: bold; min-height: 30px;"
-            progress_bar_style = "QProgressBar {border: 1px solid #555; border-radius: 3px; text-align: center; background-color: #333;} " \
-                                "QProgressBar::chunk {background-color: #1976D2;}"
-            table_style = "alternate-background-color: #3A3A3A;"
-            group_box_style = "QGroupBox {border: 1px solid #555; border-radius: 5px; margin-top: 1ex; padding: 10px;} " \
-                             "QGroupBox::title {subcontrol-origin: margin; subcontrol-position: top center; padding: 0 5px;}"
-        else:
-            # 亮色主题样式
-            select_btn_style = "background-color: #4CAF50; color: white; font-weight: bold;"
-            start_btn_style = "background-color: #2196F3; color: white; font-weight: bold; min-height: 30px;"
-            progress_bar_style = "QProgressBar {border: 1px solid grey; border-radius: 3px; text-align: center;} " \
-                                "QProgressBar::chunk {background-color: #2196F3;}"
-            table_style = "alternate-background-color: #f2f2f2;"
-            group_box_style = "QGroupBox {border: 1px solid #ccc; border-radius: 5px; margin-top: 1ex; padding: 10px;} " \
-                             "QGroupBox::title {subcontrol-origin: margin; subcontrol-position: top center; padding: 0 5px;}"
-
         # 顶部控制区域
         control_group = QGroupBox("控制面板")
-        control_group.setStyleSheet(group_box_style)
         control_layout = QVBoxLayout()
 
         # 选择目录按钮
         dir_layout = QHBoxLayout()
         self.dir_label = QLabel("未选择目录")
-        self.dir_label.setStyleSheet("font-weight: bold;")
         self.select_dir_btn = QPushButton("选择目录")
-        self.select_dir_btn.setStyleSheet(select_btn_style)
         self.select_dir_btn.clicked.connect(self.select_directory)
         dir_layout.addWidget(QLabel("目录:"))
         dir_layout.addWidget(self.dir_label, 1)
@@ -91,14 +95,12 @@ class DeviceInspectionPage(QWidget):
         # 开始检测按钮和进度条
         action_layout = QHBoxLayout()
         self.start_btn = QPushButton("开始检测")
-        self.start_btn.setStyleSheet(start_btn_style)
         self.start_btn.clicked.connect(self.start_inspection)
         self.start_btn.setEnabled(False)
         action_layout.addWidget(self.start_btn)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        self.progress_bar.setStyleSheet(progress_bar_style)
         action_layout.addWidget(self.progress_bar, 1)
         control_layout.addLayout(action_layout)
 
@@ -107,7 +109,6 @@ class DeviceInspectionPage(QWidget):
 
         # 结果显示区域
         results_group = QGroupBox("检测结果")
-        results_group.setStyleSheet(group_box_style)
         results_layout = QVBoxLayout()
 
         # 使用选项卡组织结果
@@ -121,13 +122,12 @@ class DeviceInspectionPage(QWidget):
         self.summary_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.summary_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.summary_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.summary_table.setAlternatingRowColors(True)
-        self.summary_table.setStyleSheet(table_style)
+        # 使用默认行颜色
 
         # 详细信息选项卡 - 使用QTreeWidget替代QTextBrowser
         self.result_tree = QTreeWidget()
         self.result_tree.setHeaderLabels(["设备信息", "状态", "详情"])
-        self.result_tree.setAlternatingRowColors(True)
+        # 使用默认行颜色
         self.result_tree.setColumnCount(3)
 
         # 设置列宽
@@ -146,42 +146,7 @@ class DeviceInspectionPage(QWidget):
         self.result_tree.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.result_tree.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
 
-        # 为暗色主题设置样式
-        if self.is_dark_theme:
-            self.result_tree.setStyleSheet("""
-                QTreeWidget {
-                    background-color: #2D2D2D;
-                    color: #E0E0E0;
-                    border: 1px solid #444;
-                }
-                QTreeWidget::item {
-                    padding: 5px;
-                    border-bottom: 1px solid #444;
-                    min-height: 22px;
-                }
-                QTreeWidget::item:selected {
-                    background-color: #37474F;
-                }
-                QTreeWidget QHeaderView::section {
-                    background-color: #424242;
-                    color: #E0E0E0;
-                    padding: 5px;
-                    border: 1px solid #555;
-                }
-                QScrollBar:vertical {
-                    background: #2D2D2D;
-                    width: 12px;
-                    margin: 0px;
-                }
-                QScrollBar::handle:vertical {
-                    background: #555;
-                    min-height: 20px;
-                    border-radius: 6px;
-                }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                    height: 0px;
-                }
-            """)
+
 
         # 添加选项卡
         self.results_tab.addTab(self.summary_table, "摘要")
@@ -218,6 +183,7 @@ class DeviceInspectionPage(QWidget):
         self.start_btn.setText("检测中...")
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("准备中... %p%")  # 显示百分比和文本
 
         # 清空之前的结果
         self.result_tree.clear()
@@ -241,17 +207,55 @@ class DeviceInspectionPage(QWidget):
         scan_item.setText(2, "正在扫描文件并执行设备检测，请稍候...")
         start_item.setExpanded(True)
 
-        # 启动工作线程
-        self.worker = InspectionWorker(directory)
+        # 启动工作线程 - 使用线程池
+        self.worker = InspectionWorker(directory, max_workers=None)  # None表示使用默认线程数
         self.worker.progress.connect(self.update_progress)
         self.worker.result.connect(self.update_result)
         self.worker.finished.connect(self.inspection_finished)
         self.worker.error.connect(self.handle_error)
+        self.worker.file_count.connect(self.update_file_count)
         self.worker.start()
 
     def update_progress(self, value):
         """更新进度条"""
         self.progress_bar.setValue(value)
+        # 更新进度条格式，显示已处理文件数和总文件数
+        if hasattr(self.worker, 'processed_count') and hasattr(self.worker, 'total_files'):
+            self.progress_bar.setFormat(f"处理中... {self.worker.processed_count}/{self.worker.total_files} 文件 (%p%)")
+
+    def update_file_count(self, count):
+        """更新文件计数"""
+        if count == 0:
+            # 没有文件可处理
+            scan_item = None
+            for i in range(self.result_tree.topLevelItemCount()):
+                item = self.result_tree.topLevelItem(i)
+                if item.text(0) == "开始检测":
+                    for j in range(item.childCount()):
+                        child = item.child(j)
+                        if child.text(0) == "状态":
+                            scan_item = child
+                            break
+                    break
+
+            if scan_item:
+                scan_item.setText(2, "目录中没有找到可处理的文件")
+            return
+
+        # 更新扫描状态信息
+        scan_item = None
+        for i in range(self.result_tree.topLevelItemCount()):
+            item = self.result_tree.topLevelItem(i)
+            if item.text(0) == "开始检测":
+                for j in range(item.childCount()):
+                    child = item.child(j)
+                    if child.text(0) == "状态":
+                        scan_item = child
+                        break
+                break
+
+        if scan_item:
+            scan_item.setText(2, f"找到 {count} 个文件，正在并行处理...")
 
     def update_result(self, result):
         """更新检测结果"""
@@ -265,42 +269,24 @@ class DeviceInspectionPage(QWidget):
             if status in status_counts:
                 status_counts[status] += 1
 
-        # 设置颜色方案（根据主题调整）
-        if self.is_dark_theme:
-            # 暗色主题颜色
-            status_color_normal = QColor("#4CAF50")  # 深绿色
-            status_color_warning = QColor("#FFC107")  # 黄色
-            status_color_abnormal = QColor("#FF9800")  # 橙色
-            status_color_error = QColor("#F44336")  # 红色
-
-            h3c_color = QColor("#64B5F6")  # 浅蓝色
-            huawei_color = QColor("#81C784")  # 浅绿色
-
-            category_color = QColor("#BBDEFB")  # 浅蓝色类别
-        else:
-            # 亮色主题颜色
-            status_color_normal = QColor("green")
-            status_color_warning = QColor("#FFC107")  # 黄色
-            status_color_abnormal = QColor("orange")
-            status_color_error = QColor("red")
-
-            h3c_color = QColor("#2196F3")  # 蓝色
-            huawei_color = QColor("#4CAF50")  # 绿色
-
-            category_color = QColor("#0D47A1")  # 深蓝色类别
+        # 设置状态颜色
+        normal_color = QColor("green")
+        abnormal_color = QColor("orange")
+        error_color = QColor("red")
+        warning_color = QColor("#FFC107")  # 黄色
 
         # 确定总体状态
         overall_status = "正常"
-        status_color = status_color_normal
+        status_color = normal_color
         if status_counts["error"] > 0:
             overall_status = "错误"
-            status_color = status_color_error
+            status_color = error_color
         elif status_counts["abnormal"] > 0:
             overall_status = "异常"
-            status_color = status_color_abnormal
+            status_color = abnormal_color
         elif status_counts["warning"] > 0:
             overall_status = "警告"
-            status_color = status_color_warning
+            status_color = warning_color
 
         # 添加到摘要表格
         row_position = self.summary_table.rowCount()
@@ -314,16 +300,14 @@ class DeviceInspectionPage(QWidget):
 
         # 设备类型
         type_item = QTableWidgetItem(device_type)
-        if device_type == "h3c":
-            type_item.setForeground(h3c_color)
-        elif device_type == "huawei":
-            type_item.setForeground(huawei_color)
         self.summary_table.setItem(row_position, 1, type_item)
 
         # 状态
         status_item = QTableWidgetItem(overall_status)
-        status_item.setForeground(status_color)
         status_item.setFont(QFont("Arial", 9, QFont.Bold))
+        # 设置状态颜色
+        if status_color:
+            status_item.setForeground(status_color)
         self.summary_table.setItem(row_position, 2, status_item)
 
         # 详情
@@ -331,16 +315,14 @@ class DeviceInspectionPage(QWidget):
         self.summary_table.setItem(row_position, 3, QTableWidgetItem(details))
 
         # 更新树形视图 - 使用QTreeWidget显示结果
-        device_color = h3c_color if device_type == "h3c" else (huawei_color if device_type == "huawei" else QColor("#888"))
-
         # 创建设备根节点
         device_item = QTreeWidgetItem(self.result_tree)
         device_item.setText(0, file_path)
         device_item.setText(1, device_type)
         device_item.setText(2, f"状态: {overall_status}")
-        device_item.setForeground(0, device_color)
-        device_item.setForeground(1, device_color)
-        device_item.setForeground(2, status_color)
+        # 设置状态颜色
+        if status_color:
+            device_item.setForeground(2, status_color)
         device_item.setExpanded(True)  # 默认展开
 
         # 存储文件路径作为数据，方便后续查找
@@ -351,31 +333,32 @@ class DeviceInspectionPage(QWidget):
             status = inspection.get('status', 'unknown')
             message = inspection.get('message', '')
 
-            # 设置状态颜色和图标
+            # 设置状态文本和颜色
             status_text = ""
+            status_item_color = None
             if status == "normal":
                 status_text = "✓ 正常"
-                status_item_color = status_color_normal
+                status_item_color = normal_color
             elif status == "abnormal":
                 status_text = "! 异常"
-                status_item_color = status_color_abnormal
+                status_item_color = abnormal_color
             elif status == "error":
                 status_text = "✗ 错误"
-                status_item_color = status_color_error
+                status_item_color = error_color
             elif status == "warning":
                 status_text = "⚠ 警告"
-                status_item_color = status_color_warning
+                status_item_color = warning_color
             else:
                 status_text = status
-                status_item_color = QColor("#888")
 
             # 创建类别节点
             category_item = QTreeWidgetItem(device_item)
             category_item.setText(0, category)
             category_item.setText(1, status_text)
             category_item.setText(2, message)
-            category_item.setForeground(0, category_color)
-            category_item.setForeground(1, status_item_color)
+            # 设置状态颜色
+            if status_item_color:
+                category_item.setForeground(1, status_item_color)
 
             # 如果有详情，添加详情子节点
             if 'details' in inspection:
@@ -386,17 +369,64 @@ class DeviceInspectionPage(QWidget):
                     # 创建告警详情父节点
                     alarm_details_item = QTreeWidgetItem(category_item)
                     alarm_details_item.setText(0, "告警详情")
-                    alarm_details_item.setForeground(0, QColor("#888"))
 
-                    # 将告警内容按行分割，每行创建一个子节点
-                    alarm_lines = str(details).split('\n')
-                    for i, line in enumerate(alarm_lines):
-                        if line.strip():  # 跳过空行
-                            line_item = QTreeWidgetItem(alarm_details_item)
-                            # 对于表头行或分隔线行，使用粗体显示
-                            if '---' in line or 'Sequence' in line or 'AlarmId' in line or 'Severity' in line:
-                                line_item.setFont(0, QFont("Arial", 9, QFont.Bold))
-                            line_item.setText(0, line)
+                    # 获取告警文本
+                    alarm_text = str(details)
+
+                    # 创建一个纯文本显示，保持原始格式
+                    text_browser = QTextBrowser()
+                    text_browser.setReadOnly(True)
+                    text_browser.setOpenExternalLinks(False)
+
+
+
+                    # 直接使用原始文本，但添加HTML格式以保持格式并高亮显示
+                    html_text = "<pre style='margin: 0; white-space: pre-wrap;'>"
+
+                    # 处理文本行
+                    lines = alarm_text.split('\n')
+
+                    for line in lines:
+                        # 检测表头行
+                        if 'Sequence' in line and 'AlarmId' in line and 'Severity' in line:
+                            html_text += f"<b>{line}</b>\n"
+                        # 检测分隔线
+                        elif re.match(r'^-+$', line.strip()) or re.match(r'^=+$', line.strip()):
+                            html_text += f"<span style='color: #888;'>{line}</span>\n"
+                        # 检测数据行（以数字开头）
+                        elif re.match(r'^\d+\s+', line.strip()):
+                            # 尝试高亮显示严重性级别
+                            if 'Warning' in line:
+                                line = line.replace('Warning', '<span style="color: #FFC107; font-weight: bold;">Warning</span>')
+                            elif 'Critical' in line:
+                                line = line.replace('Critical', '<span style="color: #F44336; font-weight: bold;">Critical</span>')
+                            elif 'Major' in line:
+                                line = line.replace('Major', '<span style="color: #FF9800; font-weight: bold;">Major</span>')
+                            elif 'Minor' in line:
+                                line = line.replace('Minor', '<span style="color: #8BC34A; font-weight: bold;">Minor</span>')
+
+                            html_text += f"{line}\n"
+                        # 其他行
+                        else:
+                            html_text += f"{line}\n"
+
+                    html_text += "</pre>"
+
+                    # 设置HTML文本
+                    text_browser.setHtml(html_text)
+
+                    # 设置固定高度
+                    text_browser.setFixedHeight(300)  # 增加高度以显示更多内容
+
+                    # 创建一个容器widget来放置文本浏览器
+                    container = QWidget()
+                    layout = QVBoxLayout(container)
+                    layout.addWidget(text_browser)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    container.setLayout(layout)
+
+                    # 将容器设置为树节点的widget
+                    self.result_tree.setItemWidget(alarm_details_item, 2, container)
 
                     # 默认不展开告警详情，避免占用太多空间
                     alarm_details_item.setExpanded(False)
@@ -407,13 +437,11 @@ class DeviceInspectionPage(QWidget):
                             details_item = QTreeWidgetItem(category_item)
                             details_item.setText(0, key)
                             details_item.setText(2, str(value))
-                            details_item.setForeground(0, QColor("#888"))
                     else:
                         # 如果不是字典，直接添加详情
                         details_item = QTreeWidgetItem(category_item)
                         details_item.setText(0, "详情")
                         details_item.setText(2, str(details))
-                        details_item.setForeground(0, QColor("#888"))
 
         # 自动调整列宽以适应内容
         self.result_tree.resizeColumnToContents(0)
@@ -425,17 +453,11 @@ class DeviceInspectionPage(QWidget):
         self.start_btn.setText("开始检测")
         self.progress_bar.setVisible(False)
 
-        # 根据主题设置颜色
-        if self.is_dark_theme:
-            normal_color = QColor("#4CAF50")  # 深绿色
-            warning_color = QColor("#FFC107")  # 黄色
-            abnormal_color = QColor("#FF9800")  # 橙色
-            error_color = QColor("#F44336")  # 红色
-        else:
-            normal_color = QColor("green")
-            warning_color = QColor("#FFC107")  # 黄色
-            abnormal_color = QColor("orange")
-            error_color = QColor("red")
+        # 设置状态颜色
+        normal_color = QColor("green")
+        abnormal_color = QColor("orange")
+        error_color = QColor("red")
+        warning_color = QColor("#FFC107")  # 黄色
 
         # 添加完成信息
         total_devices = self.summary_table.rowCount()
@@ -456,7 +478,6 @@ class DeviceInspectionPage(QWidget):
         summary_item = QTreeWidgetItem(self.result_tree)
         summary_item.setText(0, "检测完成")
         summary_item.setText(2, f"共检测了 {total_devices} 个设备文件")
-        summary_item.setForeground(0, normal_color)
         summary_item.setExpanded(True)
 
         # 统计各种状态的设备数量
@@ -524,7 +545,7 @@ class DeviceInspectionPage(QWidget):
 
             # 显示一个临时高亮效果
             original_bg = found_item.background(0)
-            highlight_color = QColor("#4CAF50" if self.is_dark_theme else "#E8F5E9")
+            highlight_color = QColor("#E8F5E9")  # 浅绿色高亮
             for col in range(3):
                 found_item.setBackground(col, highlight_color)
 
@@ -560,18 +581,10 @@ class DeviceInspectionPage(QWidget):
         self.start_btn.setText("开始检测")
         self.progress_bar.setVisible(False)
 
-        # 根据主题设置颜色
-        if self.is_dark_theme:
-            error_color = QColor("#F44336")  # 红色
-        else:
-            error_color = QColor("red")
-
         # 显示错误信息
         error_item = QTreeWidgetItem(self.result_tree)
         error_item.setText(0, "错误")
         error_item.setText(2, "检测过程中发生错误")
-        error_item.setForeground(0, error_color)
-        error_item.setForeground(2, error_color)
         error_item.setExpanded(True)
 
         # 添加错误详情

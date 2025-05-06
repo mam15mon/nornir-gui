@@ -1,9 +1,8 @@
 from PySide6.QtWidgets import QMainWindow, QTabWidget
-from PySide6.QtCore import Qt
-
 from .pages.inventory_page import InventoryPage
 from .pages.operation_page import OperationPage
 from .pages.settings_page import SettingsPage
+from .pages.device_inspection_page import DeviceInspectionPage
 from core.db.database import Database
 from core.proxy_manager import ProxyManager
 from core.event_bus import event_bus
@@ -35,6 +34,9 @@ class MainWindow(QMainWindow):
         # 添加所有页面
         self.operation_page = OperationPage(self.db, self)
         self.tab_widget.addTab(self.operation_page, "设备操作")
+
+        self.device_inspection_page = DeviceInspectionPage()
+        self.tab_widget.addTab(self.device_inspection_page, "设备检测")
 
         self.inventory_page = InventoryPage(self.db, self)
         self.tab_widget.addTab(self.inventory_page, "设备库存管理")

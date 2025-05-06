@@ -3,10 +3,10 @@ from PySide6.QtWidgets import (
     QFileDialog, QLabel, QProgressBar,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QTabWidget, QTreeWidget, QTreeWidgetItem, QGroupBox, QApplication,
-    QAbstractItemView
+    QAbstractItemView, QMenu
 )
-from PySide6.QtCore import QThread, Signal, QSize
-from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtCore import QThread, Signal, QSize, QTimer, Qt
+from PySide6.QtGui import QColor, QFont, QPalette, QAction
 from core.device_inspector import DeviceInspector
 
 class InspectionWorker(QThread):
@@ -187,6 +187,13 @@ class DeviceInspectionPage(QWidget):
         self.results_tab.addTab(self.summary_table, "摘要")
         self.results_tab.addTab(self.result_tree, "详细信息")
 
+        # 连接摘要表格的双击事件
+        self.summary_table.cellDoubleClicked.connect(self.on_summary_double_clicked)
+
+        # 启用右键菜单
+        self.summary_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.summary_table.customContextMenuRequested.connect(self.show_summary_context_menu)
+
         results_layout.addWidget(self.results_tab)
         results_group.setLayout(results_layout)
         main_layout.addWidget(results_group, 1)  # 让结果区域占据更多空间
@@ -336,6 +343,9 @@ class DeviceInspectionPage(QWidget):
         device_item.setForeground(2, status_color)
         device_item.setExpanded(True)  # 默认展开
 
+        # 存储文件路径作为数据，方便后续查找
+        device_item.setData(0, Qt.UserRole, file_path)
+
         # 为每个类别创建子节点
         for category, inspection in result['results'].items():
             status = inspection.get('status', 'unknown')
@@ -481,6 +491,68 @@ class DeviceInspectionPage(QWidget):
 
         # 自动切换到详细信息选项卡
         self.results_tab.setCurrentIndex(1)
+
+    def on_summary_double_clicked(self, row, _):
+        """处理摘要表格的双击事件，跳转到对应的详细信息"""
+        # 获取文件名
+        file_item = self.summary_table.item(row, 0)
+        if not file_item:
+            return
+
+        file_name = file_item.text()
+        file_path = file_item.toolTip()  # 完整路径存储在工具提示中
+
+        # 切换到详细信息选项卡
+        self.results_tab.setCurrentIndex(1)
+
+        # 查找对应的设备节点
+        found_item = None
+        for i in range(self.result_tree.topLevelItemCount()):
+            item = self.result_tree.topLevelItem(i)
+            # 检查是否是设备节点（通过存储的数据或文本内容）
+            if (item.data(0, Qt.UserRole) == file_path or
+                item.text(0) == file_path or
+                file_name in item.text(0)):
+                found_item = item
+                break
+
+        # 如果找到了对应的节点，选中并滚动到该节点
+        if found_item:
+            self.result_tree.setCurrentItem(found_item)
+            self.result_tree.scrollToItem(found_item, QAbstractItemView.PositionAtTop)
+            found_item.setExpanded(True)
+
+            # 显示一个临时高亮效果
+            original_bg = found_item.background(0)
+            highlight_color = QColor("#4CAF50" if self.is_dark_theme else "#E8F5E9")
+            for col in range(3):
+                found_item.setBackground(col, highlight_color)
+
+            # 使用QTimer在一段时间后恢复原来的背景色
+            QTimer.singleShot(1500, lambda: self.reset_highlight(found_item, original_bg))
+
+    def show_summary_context_menu(self, position):
+        """显示摘要表格的右键菜单"""
+        # 获取当前选中的行
+        row = self.summary_table.rowAt(position.y())
+        if row < 0:
+            return
+
+        # 创建右键菜单
+        menu = QMenu(self)
+
+        # 添加跳转到详情的操作
+        view_details_action = QAction("查看详细信息", self)
+        view_details_action.triggered.connect(lambda: self.on_summary_double_clicked(row, 0))
+        menu.addAction(view_details_action)
+
+        # 显示菜单
+        menu.exec_(self.summary_table.mapToGlobal(position))
+
+    def reset_highlight(self, item, original_bg):
+        """重置高亮效果"""
+        for col in range(3):
+            item.setBackground(col, original_bg)
 
     def handle_error(self, error_msg):
         """处理错误"""

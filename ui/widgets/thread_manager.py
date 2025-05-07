@@ -10,15 +10,16 @@ from core.nornir_manager.threads import (
     SaveThread,
     DnatThread,
     InterfaceThread,
-    MacIpNewThread
+    MacIpNewThread,
+    DeviceInspectionThread
 )
 from core.nornir_manager.operations.dnat_query import DnatQuery
 
-ThreadType = Union[TestThread, BackupThread, DiffThread, CommandThread, SaveThread, DnatThread, InterfaceThread, MacIpNewThread]
+ThreadType = Union[TestThread, BackupThread, DiffThread, CommandThread, SaveThread, DnatThread, InterfaceThread, MacIpNewThread, DeviceInspectionThread]
 
 class ThreadManager(QObject):
     """线程管理器，用于管理所有操作线程"""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         # 使用字典统一管理所有类型的线程
@@ -31,13 +32,14 @@ class ThreadManager(QObject):
             'dnat': [],
             'interface': [],
             'macip': [],
-            'macipnew': []
+            'macipnew': [],
+            'deviceinspection': []
         }
-        
+
     def add_thread(self, thread_type: str, thread: ThreadType, result_callback: Callable):
         """
         统一的添加线程方法
-        
+
         Args:
             thread_type: 线程类型，必须是 self.threads 中的一个键
             thread: 要添加的线程实例
@@ -45,29 +47,29 @@ class ThreadManager(QObject):
         """
         if thread_type not in self.threads:
             raise ValueError(f"不支持的线程类型: {thread_type}")
-            
+
         self.threads[thread_type].append(thread)
         thread.finished.connect(result_callback)
         thread.finished.connect(lambda *args: self._on_thread_finished(thread_type, thread))
-                
+
     def stop_all_threads(self):
         """停止所有线程"""
         for threads in self.threads.values():
             for thread in threads:
                 if thread.isRunning():
                     thread.stop()
-                
+
     def has_running_threads(self) -> bool:
         """检查是否有正在运行的线程"""
-        return any(thread.isRunning() 
+        return any(thread.isRunning()
                   for threads in self.threads.values()
                   for thread in threads)
-    
+
     def _on_thread_finished(self, thread_type: str, thread: ThreadType):
         """统一的线程完成处理"""
         self.threads[thread_type].remove(thread)
         thread.deleteLater()
-        
+
     def cleanup(self):
         """清理所有线程"""
         self.stop_all_threads()
@@ -75,4 +77,4 @@ class ThreadManager(QObject):
             for thread in threads:
                 if thread.isRunning():
                     thread.wait()
-            threads.clear()  # 清理所有类型的线程列表 
+            threads.clear()  # 清理所有类型的线程列表

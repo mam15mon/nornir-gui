@@ -6,6 +6,7 @@ from ..operations.config_save import ConfigSave
 from ..operations.command_sender import CommandSender
 from ..operations.dnat_query import DnatQuery
 from ..operations.interface_query import InterfaceQuery
+from ..operations.device_inspection import DeviceInspection
 from core.nornir_manager.operations.mac_ip_query import MacIpQueryNew
 
 
@@ -54,4 +55,10 @@ class MacIpNewThread(BaseMacIpThread):
 class CommandThread(BaseCommandThread):
     """命令发送线程"""
     def __init__(self, parent=None):
-        super().__init__(CommandSender(), parent) 
+        super().__init__(CommandSender(), parent)
+
+
+class DeviceInspectionThread(BaseOperationThread):
+    """设备巡检线程"""
+    def __init__(self, parent=None):
+        super().__init__(DeviceInspection(), parent)

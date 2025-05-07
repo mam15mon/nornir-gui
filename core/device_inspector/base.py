@@ -26,8 +26,16 @@ class DeviceInspector(ABC):
                     return "huawei"
 
             # H3C设备标识
-            if re.search(r'H3C Comware', content):
-                return "h3c"
+            h3c_brands = [
+                r'H3C Comware',
+                r'H3C S\d+',
+                r'hp_comware',
+                r'HPE Comware'
+            ]
+
+            for pattern in h3c_brands:
+                if re.search(pattern, content, re.IGNORECASE):
+                    return "h3c"
 
             # 如果没有找到厂商标识，则检查命令特征
             # 华为特有命令特征

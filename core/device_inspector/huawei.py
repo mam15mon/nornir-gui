@@ -166,28 +166,33 @@ class HuaweiInspector(DeviceInspector):
             if not alarm_output:
                 return {"status": "normal", "message": "无活动告警"}
 
+            # 检查是否包含"No active alarm"或类似信息
+            if re.search(r'No active alarm|No alarm|No alarm information|No active alarms', alarm_output, re.IGNORECASE):
+                return {"status": "normal", "message": "无活动告警"}
+
             # 检查是否包含实际的告警信息（不是空行或只有分隔符）
-            # 只有包含字母、数字和特定关键词的内容才被视为告警
+            # 只有包含特定告警关键词的内容才被视为告警
             alarm_keywords = [
                 'CRITICAL', 'MAJOR', 'MINOR', 'WARNING',
-                'Error', 'Failure', 'Failed', 'Alarm', 'Alert',
-                'Sequence', 'AlarmId', 'Severity'
+                'Error', 'Failure', 'Failed', 'Alarm', 'Alert'
             ]
 
             # 检查是否包含告警关键词
             has_alarm_keyword = any(keyword.lower() in alarm_output.lower() for keyword in alarm_keywords)
 
-            # 检查是否包含表格结构（通常表示有告警信息）
-            has_table_structure = bool(re.search(r'[-]+\s*\n.*?\n[-]+', alarm_output, re.DOTALL))
+            # 检查是否包含告警表格头部（通常表示有告警表格）
+            has_alarm_table = bool(re.search(r'Sequence\s+AlarmId\s+Severity', alarm_output, re.IGNORECASE))
 
-            # 如果输出只有空行或空格，不算有告警
-            has_content = bool(re.search(r'[A-Za-z0-9]', alarm_output))
+            # 检查是否包含设备状态信息（通常来自display device命令）
+            is_device_status = bool(re.search(r'Device status|Slot\s+Sub\s+Type\s+Online\s+Power\s+Register\s+Status', alarm_output, re.IGNORECASE))
 
-            # 检查是否包含表格头部（通常表示有告警表格）
-            has_table_header = bool(re.search(r'Sequence\s+AlarmId\s+Severity', alarm_output, re.IGNORECASE))
+            # 如果包含设备状态信息，不认为是告警
+            if is_device_status:
+                return {"status": "normal", "message": "无活动告警"}
 
-            if (has_alarm_keyword or has_table_structure or has_table_header) and has_content:
-                # 提取完整的告警内容，包括表格
+            # 如果包含告警关键词或告警表格，认为有告警
+            if has_alarm_keyword or has_alarm_table:
+                # 提取完整的告警内容
                 full_alarm_content = alarm_output
 
                 # 如果告警内容被截断，尝试提取更完整的内容
@@ -203,7 +208,7 @@ class HuaweiInspector(DeviceInspector):
 
                 return {"status": "abnormal", "message": "有活动告警", "details": full_alarm_content}
             else:
-                # 如果没有找到告警关键词或表格结构，认为没有告警
+                # 如果没有找到告警关键词或表格，认为没有告警
                 return {"status": "normal", "message": "无活动告警"}
 
         # 如果使用上面的模式无法匹配，尝试更宽松的匹配
@@ -219,8 +224,16 @@ class HuaweiInspector(DeviceInspector):
             if len(output_lines) <= 2:  # 命令行 + 输出:
                 return {"status": "normal", "message": "无活动告警"}
 
+            # 检查是否包含"No active alarm"或类似信息
+            if re.search(r'No active alarm|No alarm|No alarm information|No active alarms', alarm_text, re.IGNORECASE):
+                return {"status": "normal", "message": "无活动告警"}
+
+            # 检查是否包含设备状态信息（通常来自display device命令）
+            if re.search(r'Device status|Slot\s+Sub\s+Type\s+Online\s+Power\s+Register\s+Status', alarm_text, re.IGNORECASE):
+                return {"status": "normal", "message": "无活动告警"}
+
             # 检查是否有实际的告警内容
-            alarm_keywords = ['CRITICAL', 'MAJOR', 'MINOR', 'WARNING', 'Error', 'Failure', 'Failed', 'Alarm', 'Sequence', 'AlarmId']
+            alarm_keywords = ['CRITICAL', 'MAJOR', 'MINOR', 'WARNING', 'Error', 'Failure', 'Failed', 'Alarm']
             if any(keyword.lower() in alarm_text.lower() for keyword in alarm_keywords):
                 # 提取输出部分
                 output_match = re.search(r'输出:\s*\n(.*?)(?=\n-{10,}\s*\n命令:|\n-{10,}\s*$|$)', alarm_text, re.DOTALL)

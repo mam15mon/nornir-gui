@@ -1,6 +1,5 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QDialog, QGroupBox, QLabel, QStatusBar)
-from PySide6.QtCore import Qt
 from datetime import datetime
 
 from ..widgets.device_list.device_table import DeviceTable

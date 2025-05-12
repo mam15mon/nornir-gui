@@ -1,7 +1,5 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QGroupBox, QLabel, QFrame, QStatusBar)
-from PySide6.QtCore import Qt
-
+                             QGroupBox, QLabel, QStatusBar)
 from ..widgets.device_list.device_table import DeviceTable
 from ..widgets.device_list.device_manager import DeviceManager
 from ..widgets.filters.filter_bar import FilterBar

@@ -127,46 +127,41 @@ class FlatDataInventory:
         
         Args:
             data: 设备列表（SQLAlchemy Host 对象列表）
-            connection_options: 连接选项配置
+            connection_options: 连接选项配置（不再使用此参数，仅保留兼容性）
         """
         from core.db.database import Database
         from core.db.models import Defaults
         
         self.data = data or []
         
-        # 如果没有提供连接选项，从数据库获取默认值
-        if connection_options is None:
-            try:
-                db = Database()
-                with db.get_session() as session:
-                    defaults = session.query(Defaults).first()
-                    if defaults:
-                        self.connection_options = {
-                            "timeout": defaults.timeout,
-                            "global_delay_factor": defaults.global_delay_factor,
-                            "fast_cli": defaults.fast_cli
-                        }
-                        logger.info(f"从数据库加载连接选项: {self.connection_options}")
-                    else:
-                        # 数据库中没有默认值，使用安全的默认值
-                        self.connection_options = {
-                            "timeout": 60,
-                            "global_delay_factor": 2.0,
-                            "fast_cli": False
-                        }
-                        logger.warning("数据库中未找到默认设置，使用安全默认值")
-            except Exception as e:
-                logger.error(f"从数据库加载连接选项时出错: {str(e)}")
-                # 发生错误时使用安全的默认值
-                self.connection_options = {
-                    "timeout": 60,
-                    "global_delay_factor": 2.0,
-                    "fast_cli": False
-                }
-        else:
-            # 使用提供的连接选项
-            self.connection_options = connection_options
-            logger.info(f"使用提供的连接选项: {self.connection_options}")
+        # 始终从数据库获取默认值，忽略传入的connection_options
+        try:
+            db = Database()
+            with db.get_session() as session:
+                defaults = session.query(Defaults).first()
+                if defaults:
+                    self.connection_options = {
+                        "timeout": defaults.timeout,
+                        "global_delay_factor": defaults.global_delay_factor,
+                        "fast_cli": defaults.fast_cli
+                    }
+                    logger.info(f"从数据库加载连接选项: {self.connection_options}")
+                else:
+                    # 数据库中没有默认值，使用安全的默认值
+                    self.connection_options = {
+                        "timeout": 60,
+                        "global_delay_factor": 2.0,
+                        "fast_cli": False
+                    }
+                    logger.warning("数据库中未找到默认设置，使用安全默认值")
+        except Exception as e:
+            logger.error(f"从数据库加载连接选项时出错: {str(e)}")
+            # 发生错误时使用安全的默认值
+            self.connection_options = {
+                "timeout": 60,
+                "global_delay_factor": 2.0,
+                "fast_cli": False
+            }
 
     def load(self) -> Inventory:
         """加载清单"""

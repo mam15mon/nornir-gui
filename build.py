@@ -10,18 +10,18 @@ from typing import Dict, List
 def clean_build_files() -> None:
     """清理构建文件"""
     print("\n🧹 清理构建文件...")
-    
+
     # 清理目录
     for dir_name in ['dist', 'build', '__pycache__']:
         if os.path.exists(dir_name):
             print(f"   删除目录: {dir_name}")
             shutil.rmtree(dir_name)
-    
+
     # 清理spec文件
     for spec_file in glob.glob('*.spec'):
         print(f"   删除文件: {spec_file}")
         os.remove(spec_file)
-    
+
     # 清理所有 __pycache__ 目录
     for root, _, _ in os.walk('.'):
         cache_dir = Path(root) / '__pycache__'
@@ -39,15 +39,15 @@ def parse_requirement(req_str):
 def get_installed_packages() -> Dict[str, str]:
     """获取已安装的包列表"""
     output = subprocess.check_output([
-        sys.executable, 
-        "-m", 
-        "pip", 
+        sys.executable,
+        "-m",
+        "pip",
         "list"
     ]).decode().split('\n')
-    
+
     return {
-        line.split()[0].lower(): line.split()[1] 
-        for line in output[2:] 
+        line.split()[0].lower(): line.split()[1]
+        for line in output[2:]
         if len(line.split()) >= 2
     }
 
@@ -55,11 +55,11 @@ def install_package(package: str) -> None:
     """安装指定的包"""
     print(f"正在安装 {package}...")
     subprocess.check_call([
-        sys.executable, 
-        "-m", 
-        "pip", 
+        sys.executable,
+        "-m",
+        "pip",
         "install",
-        "-i", 
+        "-i",
         "https://pypi.tuna.tsinghua.edu.cn/simple",
         package
     ])
@@ -67,21 +67,21 @@ def install_package(package: str) -> None:
 def install_requirements() -> None:
     """安装必要的依赖"""
     print("检查依赖...")
-    
+
     # 获取已安装的包列表
     installed_packages = get_installed_packages()
-    
+
     # 从requirements.txt读取依赖
     with open('requirements.txt', 'r', encoding='utf-8') as f:
         requirements = [line.strip() for line in f if line.strip()]
-    
+
     # 添加构建所需的额外依赖
     requirements.append("pyinstaller")
-    
+
     # 检查并安装/更新每个依赖
     for req in requirements:
         pkg_name, pkg_version = parse_requirement(req)
-        
+
         if pkg_name not in installed_packages:
             # 包不存在，安装它
             install_package(req)
@@ -97,20 +97,20 @@ def verify_and_convert_icon() -> str:
     # 确保assets目录存在
     assets_dir = Path('assets')
     assets_dir.mkdir(exist_ok=True)
-    
+
     # 只检查ico文件
     ico_path = assets_dir / 'icon.ico'
-    
+
     if not ico_path.exists():
         print(f"错误: 图标文件不存在: {ico_path}")
         sys.exit(1)
-        
+
     return str(ico_path)
 
 def get_pyinstaller_args() -> List[str]:
     """获取 PyInstaller 参数列表"""
     site_packages = Path(sys.prefix) / 'Lib' / 'site-packages'
-    
+
     return [
         'main.py',  # 主程序文件
         '--name=nornir_gui',  # 英文名称
@@ -168,12 +168,12 @@ def copy_to_release(exe_name: str) -> None:
     """复制文件到发布目录"""
     release_dir = Path('release')
     release_dir.mkdir(exist_ok=True)
-    
+
     src_path = Path('dist') / exe_name
-    
+
     if not src_path.exists():
         raise FileNotFoundError(f"生成文件 {src_path} 不存在，请检查构建日志")
-    
+
     shutil.copy2(src_path, release_dir)
 
 def check_gh_cli() -> bool:
@@ -187,11 +187,11 @@ def check_gh_cli() -> bool:
         try:
             # 检查是否已通过winget安装
             result = subprocess.run(
-                ["winget", "list", "--name", "GitHub"], 
-                capture_output=True, 
+                ["winget", "list", "--name", "GitHub"],
+                capture_output=True,
                 text=True
             )
-            
+
             if "GitHub CLI" in result.stdout:
                 print("💡 GitHub CLI 已经安装，但可能需要重启终端或重启电脑")
                 print("   请尝试:")
@@ -213,7 +213,7 @@ def check_gh_cli() -> bool:
 
 def publish_to_github(version: str = None, title: str = None, notes: str = None, draft: bool = False, pre_release: bool = False) -> bool:
     """将构建好的文件发布到GitHub
-    
+
     Args:
         version: 版本号，例如 v0.1.1
         title: 发布标题，如果不指定则使用版本号
@@ -222,28 +222,28 @@ def publish_to_github(version: str = None, title: str = None, notes: str = None,
         pre_release: 是否标记为预发布版本
     """
     print("\n🚀 发布到GitHub...")
-    
+
     # 检查gh命令行工具
     if not check_gh_cli():
         return False
-    
+
     # 确保release目录中有可执行文件
     exe_path = Path('release') / 'nornir_gui.exe'
     if not exe_path.exists():
         print("❌ 错误: 找不到要发布的可执行文件")
         return False
-    
+
     try:
         # 获取所有标签
         tags = subprocess.check_output(["git", "tag"]).decode().split()
-        
+
         # 如果没有指定版本号，列出现有版本并要求输入
         if not version:
             if tags:
                 print("\n现有版本:")
                 for tag in sorted(tags):
                     print(f"  {tag}")
-            
+
             while True:
                 version = input("\n请输入新的版本号 (例如 v0.1.1): ").strip()
                 if not version:
@@ -253,23 +253,37 @@ def publish_to_github(version: str = None, title: str = None, notes: str = None,
                     print("❌ 版本号必须以 'v' 开头")
                     continue
                 if version in tags:
-                    print(f"❌ 版本 {version} 已存在")
-                    continue
+                    confirm = input(f"⚠️ 版本 {version} 已存在，是否覆盖? (y/n): ").strip().lower()
+                    if confirm != 'y':
+                        continue
                 break
-        
+
         # 如果没有指定标题，使用默认标题
         if not title:
             title = f"Nornir GUI {version}"
-        
+
         # 如果没有指定说明，使用默认说明
         if not notes:
             notes = f"Nornir GUI {version} 发布版本"
-        
+
+        # 检查标签是否已存在
+        if version in tags:
+            print(f"⚠️ 标签 {version} 已存在，正在清理...")
+            try:
+                # 删除本地标签
+                subprocess.run(["git", "tag", "-d", version], check=True)
+                # 删除远程标签
+                subprocess.run(["git", "push", "origin", ":refs/tags/" + version], check=True)
+                print(f"✅ 成功清理已存在的标签 {version}")
+            except subprocess.CalledProcessError as e:
+                print(f"❌ 清理标签失败: {str(e)}")
+                return False
+
         # 创建版本标签
         print(f"📌 创建标签 {version}...")
         subprocess.run(["git", "tag", version], check=True)
         subprocess.run(["git", "push", "origin", version], check=True)
-        
+
         # 构建发布命令
         cmd = [
             "gh", "release", "create",
@@ -277,32 +291,38 @@ def publish_to_github(version: str = None, title: str = None, notes: str = None,
             "--title", title,
             "--notes", notes,
         ]
-        
+
         # 添加可选参数
         if draft:
             cmd.append("--draft")
         if pre_release:
             cmd.append("--prerelease")
-            
+
         # 添加文件
         cmd.append(str(exe_path))
-        
+
         # 创建发布
         print("📦 创建发布版本...")
         subprocess.run(cmd, check=True)
-        
+
         print(f"✅ 成功发布 {version} 到GitHub")
         return True
-        
+
     except subprocess.CalledProcessError as e:
         print(f"❌ 发布失败: 命令执行错误 - {str(e)}")
         # 清理失败的tag
         try:
-            subprocess.run(["git", "tag", "-d", version])
-            subprocess.run(["git", "push", "origin", ":refs/tags/" + version])
-            print(f"🧹 已清理失败的标签 {version}")
-        except:
-            pass
+            # 检查标签是否存在
+            current_tags = subprocess.check_output(["git", "tag"]).decode().split()
+            if version in current_tags:
+                print(f"🧹 正在清理失败的标签 {version}...")
+                # 删除本地标签
+                subprocess.run(["git", "tag", "-d", version], check=True)
+                # 删除远程标签
+                subprocess.run(["git", "push", "origin", ":refs/tags/" + version], check=True)
+                print(f"✅ 已成功清理失败的标签 {version}")
+        except Exception as tag_error:
+            print(f"⚠️ 清理标签时出错: {str(tag_error)}")
         return False
     except Exception as e:
         print(f"❌ 发布失败: {str(e)}")
@@ -312,11 +332,11 @@ def build_exe() -> None:
     """构建可执行文件"""
     # 确保安装了依赖
     install_requirements()
-    
+
     # 清理旧的release目录
     if os.path.exists('release'):
         shutil.rmtree('release')
-    
+
     # 运行 PyInstaller
     try:
         # pylint: disable=import-outside-toplevel
@@ -325,15 +345,15 @@ def build_exe() -> None:
     except ImportError:
         print("错误: 未能导入 PyInstaller，请确保已正确安装")
         sys.exit(1)
-    
+
     # 复制到发布目录
     copy_to_release('nornir_gui.exe')
-    
+
     # 清理构建文件
     clean_build_files()
-    
+
     print("\n🎉 构建完成！发布包在 release 目录中")
-    
+
     # 询问是否发布
     response = input("\n是否发布到GitHub? (y/n): ")
     if response.lower() == 'y':
@@ -352,7 +372,7 @@ if __name__ == '__main__':
             notes = None
             draft = False
             pre_release = False
-            
+
             # 解析参数
             i = 2
             while i < len(sys.argv):
@@ -374,7 +394,7 @@ if __name__ == '__main__':
                 elif arg == '--pre-release':
                     pre_release = True
                 i += 1
-            
+
             publish_to_github(version, title, notes, draft, pre_release)
         elif sys.argv[1] == 'all':
             build_exe()

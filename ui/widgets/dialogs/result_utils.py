@@ -26,7 +26,8 @@ CATEGORY_NAMES = {
     "fan": "风扇",
     "ntp": "NTP",
     "interface_errors": "接口",
-    "alarms": "告警"
+    "alarms": "告警",
+    "temperature": "温度"
 }
 
 def get_status_color(status):

@@ -244,3 +244,56 @@ class HuaweiInspector(DeviceInspector):
 
         # 默认情况下，如果没有找到明确的告警信息，认为没有告警
         return {"status": "normal", "message": "无活动告警"}
+
+    def temperature_inspect(self, content: str) -> Dict:
+        """检查设备温度状态"""
+        # 首先检查命令是否执行
+        if not re.search(r"display environment", content, re.IGNORECASE):
+            return {"status": "warning", "message": "温度状态:未知，设备可能不支持display environment命令"}
+
+        # 检查是否有温度信息输出
+        if not re.search(r"temperature|sensor", content, re.IGNORECASE):
+            return {"status": "warning", "message": "温度状态:未知，未找到温度信息"}
+
+        temp_abnormal = {}
+
+        # 匹配华为设备温度格式
+        pattern = re.compile(r'(\S+)\s+temperature\s+(\d+)C\s+Normal\s+(\d+)C\s+(\d+)C\s+(\d+)C', re.IGNORECASE)
+        matches = list(pattern.finditer(content))
+
+        for match in matches:
+            if match and len(match.groups()) >= 5:
+                sensor_name = match.group(1)
+                current_temp = int(match.group(2))
+                warning_temp = int(match.group(4))
+                alarm_temp = int(match.group(5))
+
+                # 直接比较当前温度与警告和告警阈值
+                if current_temp >= alarm_temp:
+                    temp_abnormal[sensor_name] = f"当前温度:{current_temp}°C, 已达告警阈值:{alarm_temp}°C"
+                elif current_temp >= warning_temp:
+                    temp_abnormal[sensor_name] = f"当前温度:{current_temp}°C, 已达警告阈值:{warning_temp}°C"
+
+        # 获取最高温度值用于显示
+        max_temp = 0
+        all_temps = []
+
+        # 从系统温度中提取
+        for match in matches:
+            if match and len(match.groups()) >= 2:
+                all_temps.append(int(match.group(2)))
+
+        if all_temps:
+            max_temp = max(all_temps)
+
+        if not temp_abnormal:
+            return {"status": "normal", "message": f"温度状态:正常，最高温度:{max_temp}°C"}
+
+        # 根据异常情况确定状态
+        status = "warning"
+        for detail in temp_abnormal.values():
+            if "告警阈值" in detail:
+                status = "abnormal"
+                break
+
+        return {"status": status, "message": f"温度状态:{'异常' if status == 'abnormal' else '警告'}，最高温度:{max_temp}°C", "details": temp_abnormal}

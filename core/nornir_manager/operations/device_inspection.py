@@ -67,6 +67,7 @@ class DeviceInspection(QObject):
             "display power",
             "display fan",
             "display alarm",
+            "display environment",  # 添加温度检测命令
             "display counters inbound interface",
             "display counters outbound interface",
             "display clock",
@@ -296,3 +297,4 @@ class DeviceInspection(QObject):
     def get_results(self) -> Dict:
         """获取巡检结果"""
         return self.results
+

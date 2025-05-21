@@ -77,6 +77,8 @@ class DeviceResultWidget(QFrame):
                 category_name = "接口"
             elif category.lower() == 'alarms':
                 category_name = "告警"
+            elif category.lower() == 'temperature':
+                category_name = "温度"
 
             # 添加状态和消息
             lines.append(f"{category_name}:")

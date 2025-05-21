@@ -278,6 +278,11 @@ class DeviceInspector(ABC):
         """告警检测"""
         pass
 
+    @abstractmethod
+    def temperature_inspect(self, content: str) -> Dict:
+        """温度检测"""
+        pass
+
     def inspect_all(self, content: str) -> Dict:
         """执行所有检测"""
         return {
@@ -287,5 +292,6 @@ class DeviceInspector(ABC):
             "fan": self.fan_inspect(content),
             "ntp": self.ntp_inspect(content),
             "interface_errors": self.int_error_inspect(content),
-            "alarms": self.alarm_inspect(content)
+            "alarms": self.alarm_inspect(content),
+            "temperature": self.temperature_inspect(content)
         }

@@ -88,19 +88,33 @@ class H3CInspector(DeviceInspector):
     def power_inspect(self, content: str) -> Dict:
         power_abnormal = {}
         if not re.search(r"display power|display device", content, re.IGNORECASE):
-            return {"status": "error", "message": "请检查是否运行display device命令"}
+            return {"status": "error", "message": "请检查是否运行display power或display device命令"}
 
-        # 匹配H3C电源输出格式
-        pattern = re.compile(r'^\s*(\d+)\s+(\S+)\s+', re.MULTILINE)
+        # 匹配H3C电源输出格式 - 更精确的模式匹配
+        # 匹配 PowerID State Mode Current(A) Voltage(V) Power(W) 格式
+        pattern = re.compile(r'^\s*(\d+)\s+(Normal|Absent|Fault|Abnormal|Present)\s+', re.MULTILINE)
         matches = pattern.findall(content)
-        for match in matches:
-            if match and len(match) >= 2:
-                if match[1] != "Normal":
-                    power_name = f"电源{match[0]}"
-                    power_abnormal[power_name] = match[1]
+
+        # 检查是否找到电源状态信息
+        if matches:
+            for match in matches:
+                if match and len(match) >= 2:
+                    if match[1] != "Normal" and match[1] != "Present":
+                        power_name = f"电源{match[0]}"
+                        power_abnormal[power_name] = match[1]
+        else:
+            # 如果没有找到标准格式，尝试其他格式
+            alt_pattern = re.compile(r'Power\s+(\d+):\s+State\s*:\s*(\S+)', re.MULTILINE)
+            alt_matches = alt_pattern.findall(content)
+
+            for match in alt_matches:
+                if match and len(match) >= 2:
+                    if match[1] != "Normal" and match[1] != "Present":
+                        power_name = f"电源{match[0]}"
+                        power_abnormal[power_name] = match[1]
 
         # 检查display device输出中的电源状态
-        if not power_abnormal:
+        if not power_abnormal and not matches:
             # 如果是S5560X等型号，通常只显示设备状态而不单独显示电源状态
             device_pattern = re.compile(r'Slot\s+Type\s+State\s+Subslot', re.MULTILINE)
             if device_pattern.search(content):
@@ -181,33 +195,74 @@ class H3CInspector(DeviceInspector):
         if not re.search(r"display counters", content, re.IGNORECASE):
             return {"status": "error", "message": "请检查是否运行display counters inbound interface和display counters outbound interface命令"}
 
-        # 匹配更多的接口类型，包括GE、XGE、BAGG等
-        pattern = re.compile(r'^(GE\d+\/\d+\/\d+|XGE\d+\/\d+\/\d+|FGE\d+\/\d+\/\d+|BAGG\d+|RAGG\d+|RAGG\d+\.+\d*?)\s+.*?\s+(\d+)$', re.MULTILINE)
-
         # 查找错包数据
         # 首先检查inbound
         inbound_section = re.search(r'display counters inbound interface\n输出:.*?(?=--------------------------------------------------)', content, re.DOTALL)
         if inbound_section:
-            matches = pattern.findall(inbound_section.group(0))
-            for match in matches:
-                if match and len(match) >= 2:
-                    if int(match[1]) > 0:
-                        interface = f"接口:{match[0]}"
-                        error_num = f"入方向错包数:{match[1]}"
-                        int_error_abnormal[interface] = error_num
+            inbound_content = inbound_section.group(0)
+
+            # 查找包含"Err"列的行
+            err_column_match = re.search(r'Interface\s+.*?Err\s+\(pkts\)', inbound_content)
+            if err_column_match:
+                # 提取所有接口行及其错包数
+                # 匹配格式: 接口名 + 若干空格和数字 + 最后一列的错包数
+                # 我们不再使用正则表达式匹配，而是直接解析每一行
+
+                # 提取错包列的索引位置
+                header_line = re.search(r'Interface\s+.*?Err\s+\(pkts\)', inbound_content).group(0)
+                err_column_index = header_line.split().index("Err")
+
+                # 处理每一行接口数据
+                for line in inbound_content.split('\n'):
+                    # 跳过表头和空行
+                    if not line.strip() or 'Interface' in line or '-' in line:
+                        continue
+
+                    parts = line.split()
+                    if len(parts) > err_column_index:
+                        interface = parts[0]
+                        try:
+                            err_count = int(parts[err_column_index])
+                            if err_count > 0:
+                                interface_name = f"接口:{interface}"
+                                error_num = f"入方向错包数:{err_count}"
+                                int_error_abnormal[interface_name] = error_num
+                        except (ValueError, IndexError):
+                            # 忽略无法解析的行
+                            pass
 
         # 然后检查outbound
         outbound_section = re.search(r'display counters outbound interface\n输出:.*?(?=--------------------------------------------------)', content, re.DOTALL)
         if outbound_section:
-            matches = pattern.findall(outbound_section.group(0))
-            for match in matches:
-                if match and len(match) >= 2:
-                    if int(match[1]) > 0:
-                        interface = f"接口:{match[0]}"
-                        if interface in int_error_abnormal:
-                            int_error_abnormal[interface] += f", 出方向错包数:{match[1]}"
-                        else:
-                            int_error_abnormal[interface] = f"出方向错包数:{match[1]}"
+            outbound_content = outbound_section.group(0)
+
+            # 查找包含"Err"列的行
+            err_column_match = re.search(r'Interface\s+.*?Err\s+\(pkts\)', outbound_content)
+            if err_column_match:
+                # 提取错包列的索引位置
+                header_line = re.search(r'Interface\s+.*?Err\s+\(pkts\)', outbound_content).group(0)
+                err_column_index = header_line.split().index("Err")
+
+                # 处理每一行接口数据
+                for line in outbound_content.split('\n'):
+                    # 跳过表头和空行
+                    if not line.strip() or 'Interface' in line or '-' in line:
+                        continue
+
+                    parts = line.split()
+                    if len(parts) > err_column_index:
+                        interface = parts[0]
+                        try:
+                            err_count = int(parts[err_column_index])
+                            if err_count > 0:
+                                interface_name = f"接口:{interface}"
+                                if interface_name in int_error_abnormal:
+                                    int_error_abnormal[interface_name] += f", 出方向错包数:{err_count}"
+                                else:
+                                    int_error_abnormal[interface_name] = f"出方向错包数:{err_count}"
+                        except (ValueError, IndexError):
+                            # 忽略无法解析的行
+                            pass
 
         # 我们不再使用display interface brief命令检测接口状态
         # 只使用display counters命令检测错包
@@ -313,3 +368,90 @@ class H3CInspector(DeviceInspector):
                 return {"status": "abnormal", "message": "有活动告警", "details": table_content}
 
         return {"status": "normal", "message": "无活动告警"}
+
+    def temperature_inspect(self, content: str) -> Dict:
+        """检查设备温度状态"""
+        # 首先检查命令是否执行
+        if not re.search(r"display environment", content, re.IGNORECASE):
+            return {"status": "warning", "message": "温度状态:未知，设备可能不支持display environment命令"}
+
+        # 检查是否有温度信息输出
+        if not re.search(r"temperature|hotspot|sensor", content, re.IGNORECASE):
+            return {"status": "warning", "message": "温度状态:未知，未找到温度信息"}
+
+        temp_abnormal = {}
+
+        # 匹配标准格式: System temperature information
+        pattern = re.compile(r'(\d+)\s+(outflow|hotspot|inflow)\s+\d+\s+(\d+)\s+\d+\s+(\d+)\s+(\d+)')
+        matches = list(pattern.finditer(content))
+
+        for match in matches:
+            if match and len(match.groups()) >= 5:
+                slot = match.group(1)
+                sensor_type = match.group(2)
+                current_temp = int(match.group(3))
+                warning_temp = int(match.group(4))
+                alarm_temp = int(match.group(5))
+
+                # 直接比较当前温度与警告和告警阈值
+                if current_temp >= alarm_temp:
+                    sensor_name = f"Slot {slot} {sensor_type}"
+                    temp_abnormal[sensor_name] = f"当前温度:{current_temp}°C, 已达告警阈值:{alarm_temp}°C"
+                elif current_temp >= warning_temp:
+                    sensor_name = f"Slot {slot} {sensor_type}"
+                    temp_abnormal[sensor_name] = f"当前温度:{current_temp}°C, 已达警告阈值:{warning_temp}°C"
+
+        # 我们不再单独检测风扇和电源温度，而是依赖设备自身的告警机制
+        # 只收集风扇和电源温度信息用于显示最高温度
+        fan_pattern = re.compile(r'Fan\s+(\d+):\s+(\d+)')
+        fan_matches = fan_pattern.finditer(content)
+
+        fan_temps = []
+        for match in fan_matches:
+            if match and len(match.groups()) >= 2:
+                try:
+                    fan_temp = int(match.group(2))
+                    fan_temps.append(fan_temp)
+                except (ValueError, TypeError):
+                    pass
+
+        # 收集电源温度信息
+        power_pattern = re.compile(r'Power\s+(\d+):\s+(\d+)')
+        power_matches = power_pattern.finditer(content)
+
+        power_temps = []
+        for match in power_matches:
+            if match and len(match.groups()) >= 2:
+                try:
+                    power_temp = int(match.group(2))
+                    power_temps.append(power_temp)
+                except (ValueError, TypeError):
+                    pass
+
+        # 获取最高温度值用于显示
+        max_temp = 0
+        all_temps = []
+
+        # 从系统温度中提取
+        for match in matches:
+            if match and len(match.groups()) >= 3:
+                all_temps.append(int(match.group(3)))
+
+        # 添加风扇和电源温度
+        all_temps.extend(fan_temps)
+        all_temps.extend(power_temps)
+
+        if all_temps:
+            max_temp = max(all_temps)
+
+        if not temp_abnormal:
+            return {"status": "normal", "message": f"温度状态:正常，最高温度:{max_temp}°C"}
+
+        # 根据异常情况确定状态
+        status = "warning"
+        for detail in temp_abnormal.values():
+            if "告警阈值" in detail:
+                status = "abnormal"
+                break
+
+        return {"status": status, "message": f"温度状态:{'异常' if status == 'abnormal' else '警告'}，最高温度:{max_temp}°C", "details": temp_abnormal}

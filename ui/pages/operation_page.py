@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QDialog, QGroupBox, QLabel, QStatusBar)
 from datetime import datetime
 
@@ -20,7 +20,7 @@ class OperationPage(QWidget):
         self.thread_manager = ThreadManager(self)  # 线程管理器
         self.init_ui()
         self.load_data()
-        
+
         # 监听设备列表变化
         event_bus.device_list_changed.connect(self.load_data)
 
@@ -46,15 +46,15 @@ class OperationPage(QWidget):
         # 右侧：操作按钮组
         operation_group = QGroupBox("")
         operation_layout = QHBoxLayout(operation_group)
-        
+
         self.operate_btn = QPushButton("操作")
         self.operate_btn.clicked.connect(self.show_operation_dialog)
         self.operate_btn.setEnabled(False)  # 初始禁用
-        
+
         self.stop_btn = QPushButton("停止")
         self.stop_btn.clicked.connect(self.stop_operations)
         self.stop_btn.setEnabled(False)  # 初始禁用
-        
+
         operation_layout.addWidget(self.operate_btn)
         operation_layout.addWidget(self.stop_btn)
         toolbar.addWidget(operation_group)
@@ -81,16 +81,16 @@ class OperationPage(QWidget):
 
         # 连接设备管理器信号
         self.device_manager.device_updated.connect(self.load_data)
-        
+
         # 添加状态栏
         self.status_bar = QStatusBar()
         self.status_bar.setSizeGripEnabled(False)  # 禁用右下角大小调整控件
         layout.addWidget(self.status_bar)
-        
+
         # 状态栏标签
         self.device_stats_label = QLabel("总设备: 0 | 已选择: 0")
         self.status_bar.addWidget(self.device_stats_label)
-        
+
         # 连接设备表格的stats_changed信号
         self.device_table.stats_changed.connect(self.update_status_bar)
 
@@ -101,7 +101,7 @@ class OperationPage(QWidget):
     def reset_device_status(self):
         """重置所有设备状态"""
         self.device_status.clear()
-        self.device_table.update_status({})
+        self.device_table.update_device_statuses({})
 
     def show_operation_dialog(self):
         """显示操作对话框"""
@@ -128,20 +128,20 @@ class OperationPage(QWidget):
         """更新设备状态"""
         self.device_status[device_name] = status
         # 刷新表格以显示新状态
-        self.device_table.update_status(self.device_status)
+        self.device_table.update_device_statuses(self.device_status)
 
     def load_data(self):
         """加载设备数据"""
         devices = self.device_manager.get_all_devices()
-        
+
         # 更新表格数据
         self.device_table.update_data(devices)
-        
+
         # 更新筛选选项
         sites = [device.site for device in devices if device.site]
         device_types = [device.device_type for device in devices if device.device_type]
         platforms = [device.platform for device in devices if device.platform]
-        
+
         self.filter_bar.update_filter_items('site', list(set(sites)))
         self.filter_bar.update_filter_items('device_type', list(set(device_types)))
         self.filter_bar.update_filter_items('platform', list(set(platforms)))
@@ -176,10 +176,10 @@ class OperationPage(QWidget):
         """清空所有设备状态显示"""
         # 清空页面和表格的状态存储
         self.device_status.clear()
-        self.device_table.device_status.clear()  # 直接操作表格内部状态存储
-        
+        self.device_table.device_status_map.clear()  # 直接操作表格内部状态存储
+
         # 强制更新表格状态列
-        self.device_table.update_status({})
-        
+        self.device_table.update_device_statuses({})
+
         # 立即刷新界面
-        self.device_table.viewport().update() 
+        self.device_table.viewport().update()

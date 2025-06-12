@@ -135,13 +135,37 @@ class HuaweiInspector(DeviceInspector):
         if not re.search("display interface brief", content):
             return {"status": "error", "message": "请检查是否运行display interface brief命令"}
 
-        pattern = re.compile(r'^(100GE\d+\/\d+\/\d+|10GE\d+\/\d+\/\d+|Eth-Trunk\d+|Eth-Trunk\d+\.+\d*?)\s+.*?\s+(\d+)$', re.MULTILINE)
+        # 修正正则表达式以匹配华为设备的多种输出格式
+        # 格式: Interface PHY Protocol InUti OutUti inErrors outErrors
+        # 示例1: 10GE2/0/2 down down 0% 0% 20 0
+        # 示例2: GigabitEthernet0/0/1 up up 0% 0% 4 0
+        # 示例3:   XGigabitEthernet0/0/1 up up 0.17% 0.62% 6 0 (缩进的成员接口)
+
+        # 使用更通用的接口名称匹配，支持所有华为设备接口类型
+        # 匹配任何接口名称：可以以字母或数字开头，包含字母、数字、连字符和斜杠
+        # 示例：GigabitEthernet0/0/1, 10GE1/0/1, Eth-Trunk3, Vlanif100, LoopBack0等
+        pattern = re.compile(r'^\s*([A-Za-z0-9][A-Za-z0-9\-]*(?:\/\d+)*(?:\.\d+)?)\s+(\S+)\s+(\S+)\s+([\d.]+%|--)\s+([\d.]+%|--)\s+(\d+)\s+(\d+)\s*$', re.MULTILINE)
         matches = pattern.findall(content)
+
         for match in matches:
-            if match and len(match) >= 2:
-                if int(match[1]) > 0:
-                    interface = f"接口:{match[0]}"
-                    error_num = f"错包数:{match[1]}"
+            if match and len(match) >= 7:
+                interface_name = match[0]
+                in_errors = int(match[5])
+                out_errors = int(match[6])
+
+                # 排除一些不需要统计错误包的接口类型（只排除NULL接口）
+                if interface_name.upper().startswith('NULL'):
+                    continue
+
+                # 检查入错误包或出错误包是否大于0
+                if in_errors > 0 or out_errors > 0:
+                    interface = f"接口:{interface_name}"
+                    if in_errors > 0 and out_errors > 0:
+                        error_num = f"入错包:{in_errors}, 出错包:{out_errors}"
+                    elif in_errors > 0:
+                        error_num = f"入错包:{in_errors}"
+                    else:
+                        error_num = f"出错包:{out_errors}"
                     int_error_abnormal[interface] = error_num
 
         if not int_error_abnormal:

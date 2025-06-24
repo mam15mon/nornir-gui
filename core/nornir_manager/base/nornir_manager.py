@@ -58,6 +58,7 @@ class NornirManager:
                 "timeout": defaults.timeout,  # 命令执行超时时间
                 "global_delay_factor": defaults.global_delay_factor,  # 全局延迟因子
                 "fast_cli": defaults.fast_cli,  # 快速CLI模式
+                "read_timeout_override": defaults.read_timeout,  # 读取超时时间
                 "num_workers": defaults.num_workers  # 并发工作线程数
             }
         

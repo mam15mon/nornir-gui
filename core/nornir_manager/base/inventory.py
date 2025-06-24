@@ -51,7 +51,8 @@ def _get_host_netmiko_options(data: Dict[str, Any]) -> Dict[str, Any]:
     option_mappings = {
         'netmiko_timeout': 'timeout',
         'netmiko_global_delay_factor': 'global_delay_factor',
-        'netmiko_fast_cli': 'fast_cli'
+        'netmiko_fast_cli': 'fast_cli',
+        'netmiko_read_timeout': 'read_timeout_override'
     }
     
     # 处理所有 netmiko_ 开头的选项
@@ -62,7 +63,7 @@ def _get_host_netmiko_options(data: Dict[str, Any]) -> Dict[str, Any]:
                 continue
                 
             option_key = option_mappings[key]
-            if option_key == 'timeout':
+            if option_key in ['timeout', 'read_timeout_override']:
                 netmiko_options['netmiko']['extras'][option_key] = int(value)
             elif option_key == 'fast_cli':
                 netmiko_options['netmiko']['extras'][option_key] = str(value).lower() not in ['0', 'false', 'none']
@@ -143,7 +144,8 @@ class FlatDataInventory:
                     self.connection_options = {
                         "timeout": defaults.timeout,
                         "global_delay_factor": defaults.global_delay_factor,
-                        "fast_cli": defaults.fast_cli
+                        "fast_cli": defaults.fast_cli,
+                        "read_timeout_override": defaults.read_timeout
                     }
                     logger.info(f"从数据库加载连接选项: {self.connection_options}")
                 else:
@@ -151,7 +153,8 @@ class FlatDataInventory:
                     self.connection_options = {
                         "timeout": 60,
                         "global_delay_factor": 2.0,
-                        "fast_cli": False
+                        "fast_cli": False,
+                        "read_timeout_override": 30
                     }
                     logger.warning("数据库中未找到默认设置，使用安全默认值")
         except Exception as e:
@@ -160,7 +163,8 @@ class FlatDataInventory:
             self.connection_options = {
                 "timeout": 60,
                 "global_delay_factor": 2.0,
-                "fast_cli": False
+                "fast_cli": False,
+                "read_timeout_override": 30
             }
 
     def load(self) -> Inventory:
@@ -190,7 +194,8 @@ class FlatDataInventory:
                         extras={
                             "timeout": self.connection_options["timeout"],
                             "global_delay_factor": self.connection_options["global_delay_factor"],
-                            "fast_cli": self.connection_options["fast_cli"]
+                            "fast_cli": self.connection_options["fast_cli"],
+                            "read_timeout_override": self.connection_options["read_timeout_override"]
                         }
                     )
                 }

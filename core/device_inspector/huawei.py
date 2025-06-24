@@ -93,7 +93,8 @@ class HuaweiInspector(DeviceInspector):
         power_abnormal = {}
         if not re.search("display device", content):
             return {"status": "error", "message": "请检查是否运行display device命令"}
-
+        # 匹配格式:
+        # 示例1: PWR1 Registered *
         pattern = re.compile(r'^(PWR\d)+\s+.*?\s+Registered\s+(\S+)', re.MULTILINE)
         matches = pattern.findall(content)
         for match in matches:
@@ -109,7 +110,8 @@ class HuaweiInspector(DeviceInspector):
         fan_abnormal = {}
         if not re.search("display device", content):
             return {"status": "error", "message": "请检查是否运行display device命令"}
-
+        # 匹配格式:
+        # 示例1: FAN1 Registered *
         pattern = re.compile(r'^(FAN\d)+\s+.*?\s+Registered\s+(\S+)', re.MULTILINE)
         matches = pattern.findall(content)
         for match in matches:
@@ -140,7 +142,6 @@ class HuaweiInspector(DeviceInspector):
         # 示例1: 10GE2/0/2 down down 0% 0% 20 0
         # 示例2: GigabitEthernet0/0/1 up up 0% 0% 4 0
         # 示例3:   XGigabitEthernet0/0/1 up up 0.17% 0.62% 6 0 (缩进的成员接口)
-
         # 使用更通用的接口名称匹配，支持所有华为设备接口类型
         # 匹配任何接口名称：可以以字母或数字开头，包含字母、数字、连字符和斜杠
         # 示例：GigabitEthernet0/0/1, 10GE1/0/1, Eth-Trunk3, Vlanif100, LoopBack0等

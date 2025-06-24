@@ -101,6 +101,12 @@ class SettingsPage(QWidget):
         self.delay_spin.setSingleStep(0.1)
         layout.addRow("延迟因子:", self.delay_spin)
 
+        # 读取超时时间
+        self.read_timeout_spin = QSpinBox()
+        self.read_timeout_spin.setRange(10, 600)
+        self.read_timeout_spin.setValue(30)
+        layout.addRow("读取超时(秒):", self.read_timeout_spin)
+
         # 并发数
         self.workers_spin = QSpinBox()
         self.workers_spin.setRange(1, 100)
@@ -260,6 +266,8 @@ class SettingsPage(QWidget):
                     self.timeout_spin.setValue(defaults.timeout)
                     self.delay_spin.setValue(defaults.global_delay_factor)
                     self.fast_cli_check.setChecked(defaults.fast_cli)
+                    if hasattr(defaults, 'read_timeout'):
+                        self.read_timeout_spin.setValue(defaults.read_timeout)
                     if hasattr(defaults, 'num_workers'):
                         self.workers_spin.setValue(defaults.num_workers)
 
@@ -322,6 +330,7 @@ class SettingsPage(QWidget):
                 defaults.timeout = self.timeout_spin.value()
                 defaults.global_delay_factor = float(self.delay_spin.value())
                 defaults.fast_cli = self.fast_cli_check.isChecked()
+                defaults.read_timeout = self.read_timeout_spin.value()
                 defaults.num_workers = self.workers_spin.value()
 
                 # 保存日志设置

@@ -8,6 +8,7 @@ from ..operations.dnat_query import DnatQuery
 from ..operations.interface_query import InterfaceQuery
 from ..operations.device_inspection import DeviceInspection
 from core.nornir_manager.operations.mac_ip_query import MacIpQueryNew
+from ..operations.firewall_address_group import FirewallAddressGroupOperation
 
 
 class TestThread(BaseOperationThread):
@@ -62,3 +63,29 @@ class DeviceInspectionThread(BaseOperationThread):
     """设备巡检线程"""
     def __init__(self, parent=None):
         super().__init__(DeviceInspection(), parent)
+
+
+class FirewallAddressGroupThread(BaseOperationThread):
+    """防火墙地址组管理线程"""
+    def __init__(self, parent=None):
+        super().__init__(FirewallAddressGroupOperation(), parent)
+        self.operation_type = None
+        self.ip_addresses = None
+        self.group_name = None
+
+    def setup(self, devices, operation_type, ip_addresses, group_name=None, status_callback=None):
+        """设置防火墙地址组操作参数"""
+        super().setup(devices, status_callback)
+        self.operation_type = operation_type
+        self.ip_addresses = ip_addresses
+        self.group_name = group_name
+
+    def _execute_operation(self):
+        """执行防火墙地址组操作"""
+        if hasattr(self.operation, 'start'):
+            self.operation.start(
+                self.devices,
+                self.operation_type,
+                self.ip_addresses,
+                self.group_name
+            )

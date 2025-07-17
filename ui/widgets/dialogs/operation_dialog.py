@@ -16,9 +16,11 @@ from core.nornir_manager.threads import (
     DnatThread,
     InterfaceThread,
     MacIpNewThread,
-    DeviceInspectionThread
+    DeviceInspectionThread,
+    FirewallAddressGroupThread
 )
 from .command_dialog import CommandDialog
+from .firewall_address_group_dialog import FirewallAddressGroupDialog
 from core.nornir_manager.operations.dnat_query import DnatQuery
 
 logger = logging.getLogger(__name__)
@@ -96,6 +98,11 @@ class OperationDialog(QDialog):
         self.save_btn = QPushButton("保存配置")
         self.save_btn.clicked.connect(lambda: self._start_operation(SaveThread, "保存配置"))
         config_layout.addWidget(self.save_btn)
+
+        # 防火墙地址组管理按钮
+        self.firewall_address_btn = QPushButton("地址组管理")
+        self.firewall_address_btn.clicked.connect(self._on_firewall_address_group_clicked)
+        config_layout.addWidget(self.firewall_address_btn)
 
 
         # 创建分组框 - 命令执行
@@ -260,6 +267,70 @@ class OperationDialog(QDialog):
                 self.current_thread.start()
                 # 关闭操作对话框
                 self.accept()
+
+    def _on_firewall_address_group_clicked(self) -> None:
+        """处理防火墙地址组管理按钮点击"""
+        devices = self._get_selected_devices()
+        if not devices:
+            return
+
+        # 检查设备类型是否支持防火墙功能
+        supported_platforms = ["huawei", "hp_comware"]
+        unsupported_devices = []
+
+        for device in devices:
+            if device.platform not in supported_platforms:
+                unsupported_devices.append(f"{device.name} ({device.platform})")
+
+        if unsupported_devices:
+            QMessageBox.warning(
+                self,
+                "设备类型不支持",
+                f"以下设备不支持防火墙地址组管理功能：\n\n" +
+                "\n".join(unsupported_devices) +
+                f"\n\n支持的设备类型：{', '.join(supported_platforms)}"
+            )
+            return
+
+        # 显示防火墙地址组管理对话框
+        address_group_dialog = FirewallAddressGroupDialog(self)
+        address_group_dialog.operation_requested.connect(
+            lambda op_type, ip_list, group_name: self._start_firewall_address_group_operation(
+                devices, op_type, ip_list, group_name
+            )
+        )
+        address_group_dialog.exec()
+
+    def _start_firewall_address_group_operation(self, devices: List[Any], operation_type: str,
+                                              ip_addresses: List[str], group_name: str) -> None:
+        """启动防火墙地址组操作"""
+        try:
+            # 创建防火墙地址组线程
+            self.current_thread = FirewallAddressGroupThread()
+            self.current_thread.setup(
+                devices,
+                operation_type,
+                ip_addresses,
+                group_name,
+                self.parent().update_device_status
+            )
+
+            # 添加到线程管理器
+            operation_name = f"防火墙地址组{'添加' if operation_type == 'add' else '删除'}"
+            self.parent().thread_manager.add_thread(
+                'firewall_address_group',
+                self.current_thread,
+                lambda results, start_time: self.parent().show_result_dialog(operation_name, results, start_time)
+            )
+
+            self.current_thread.start()
+
+            # 关闭操作对话框
+            self.accept()
+
+        except Exception as e:
+            logger.error(f"启动防火墙地址组操作失败: {str(e)}")
+            QMessageBox.critical(self, "操作失败", f"启动防火墙地址组操作失败：\n{str(e)}")
 
     def _get_selected_devices(self) -> List[Any]:
         """获取选中的设备数据"""

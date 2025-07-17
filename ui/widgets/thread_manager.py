@@ -11,11 +11,12 @@ from core.nornir_manager.threads import (
     DnatThread,
     InterfaceThread,
     MacIpNewThread,
-    DeviceInspectionThread
+    DeviceInspectionThread,
+    FirewallAddressGroupThread
 )
 from core.nornir_manager.operations.dnat_query import DnatQuery
 
-ThreadType = Union[TestThread, BackupThread, DiffThread, CommandThread, SaveThread, DnatThread, InterfaceThread, MacIpNewThread, DeviceInspectionThread]
+ThreadType = Union[TestThread, BackupThread, DiffThread, CommandThread, SaveThread, DnatThread, InterfaceThread, MacIpNewThread, DeviceInspectionThread, FirewallAddressGroupThread]
 
 class ThreadManager(QObject):
     """线程管理器，用于管理所有操作线程"""
@@ -33,7 +34,8 @@ class ThreadManager(QObject):
             'interface': [],
             'macip': [],
             'macipnew': [],
-            'deviceinspection': []
+            'deviceinspection': [],
+            'firewall_address_group': []
         }
 
     def add_thread(self, thread_type: str, thread: ThreadType, result_callback: Callable):

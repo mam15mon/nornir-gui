@@ -15,10 +15,52 @@ class OverviewFormatter:
         result_text = result.get('result', '')
         output_file = result.get('output_file')
         inspection_result = result.get('inspection_result', {})
-        
+
+        # 检查是否是防火墙地址组操作结果
+        operation = result.get('operation')
+        ip_addresses = result.get('ip_addresses')
+        group_name = result.get('group_name')
+        commands = result.get('commands')
+
         # 设置状态颜色
         status_color = get_status_color(status)
-        
+
+        # 如果是防火墙地址组操作结果
+        if operation in ['add', 'delete']:
+            content = [
+                f"设备: <a href='device:{device_name}' style='text-decoration: none; color: inherit;'><b>{device_name}</b></a>",
+                f"状态: <a href='device:{device_name}' style='text-decoration: none;'><span style='color: {status_color}; font-weight: bold;'>{status}</span></a>"
+            ]
+
+            # 添加操作详情
+            operation_text = "添加地址" if operation == "add" else "删除地址"
+            content.append(f"<br><b>操作类型:</b> {operation_text}")
+
+            if group_name:
+                content.append(f"<b>地址组:</b> {group_name}")
+
+            if ip_addresses:
+                content.append(f"<b>IP地址:</b> {', '.join(ip_addresses)}")
+
+            # 如果操作失败，显示错误信息
+            if result.get('failed') or '错误' in status:
+                error_msg = result.get('error', '未知错误')
+                content.append(f"<br><b>错误信息:</b> <span style='color: red;'>{error_msg}</span>")
+            else:
+                # 显示执行的命令（仅在成功时）
+                if commands:
+                    content.append("<br><b>执行的命令:</b>")
+                    for cmd in commands:
+                        if not cmd.startswith('#'):  # 跳过注释行
+                            content.append(f"<code style='background-color: #f0f0f0; padding: 2px 4px; font-family: monospace;'>{cmd}</code>")
+
+                # 如果有输出文件，添加文件链接（仅在成功时）
+                if output_file:
+                    content.append(f"<br><b>输出文件:</b> <a href='{QUrl.fromLocalFile(output_file).toString()}'>{os.path.basename(output_file)}</a>")
+
+            content.append("<hr>")
+            return "<br>".join(content)
+
         # 如果是设备巡检结果，使用inspection_result
         if inspection_result and not result_text:
             # 显示设备名称和状态（添加可点击链接）

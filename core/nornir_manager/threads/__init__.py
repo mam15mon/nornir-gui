@@ -7,7 +7,8 @@ from .operation_threads import (
     DnatThread,
     InterfaceThread,
     MacIpNewThread,
-    DeviceInspectionThread
+    DeviceInspectionThread,
+    FirewallAddressGroupThread
 )
 from .base import BaseOperationThread, BaseCommandThread
 
@@ -21,6 +22,7 @@ __all__ = [
     'InterfaceThread',
     'MacIpNewThread',
     'DeviceInspectionThread',
+    'FirewallAddressGroupThread',
     'BaseOperationThread',
     'BaseCommandThread'
 ]

@@ -12,7 +12,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.db = Database()
-        self.proxy_manager = ProxyManager()
+        self.proxy_manager = ProxyManager(self.db)
         self.init_ui()
         self.init_proxy()
         

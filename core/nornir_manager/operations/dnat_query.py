@@ -6,7 +6,7 @@ from datetime import datetime
 from nornir.core.task import Task, Result
 from nornir_netmiko.tasks import netmiko_send_command
 from core.db.database import Database
-from core.db.models import Settings
+
 from core.utils.logger import log_operation, handle_error
 from .base import BaseOperation
 
@@ -18,15 +18,10 @@ class DnatQuery(BaseOperation):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        
-        # 获取基础路径
-        with Database().get_session() as session:
-            settings = session.query(Settings).first()
-            self.base_path = settings.config_base_path if settings and settings.config_base_path else os.path.join(os.getcwd(), "配置文件")
-            
-        # 创建查询结果目录
-        self.query_path = os.path.normpath(os.path.join(self.base_path, "DNAT查询"))
-        os.makedirs(self.query_path, exist_ok=True)
+
+        # 使用统一的路径获取方法
+        from core.config.path_utils import get_archive_subdir_path
+        self.query_path = get_archive_subdir_path("DNAT查询", self.db)
     
     def query_dnat(self, task: Task) -> Result:
         """查询单个设备的DNAT配置"""

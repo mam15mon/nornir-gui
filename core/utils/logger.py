@@ -6,7 +6,6 @@ from datetime import datetime
 from functools import wraps
 from typing import Callable, Any
 from core.db.database import Database
-from core.db.models import Settings
 import tempfile
 from logging.handlers import RotatingFileHandler
 import glob
@@ -92,11 +91,12 @@ def setup_logging():
     )
 
     try:
-        # 获取数据库中的日志级别设置
+        # 获取用户配置中的日志级别设置
         try:
-            with Database().get_session() as session:
-                settings = session.query(Settings).first()
-                log_level = get_log_level(settings.log_file_level if settings else 'INFO')
+            from core.config.user_config import UserConfigManager
+            user_config = UserConfigManager()
+            log_level_str = user_config.get_log_level()
+            log_level = get_log_level(log_level_str)
         except Exception as e:
             print(f"读取日志级别设置失败: {e}")
             log_level = logging.INFO  # 如果无法读取设置，默认使用 INFO 级别

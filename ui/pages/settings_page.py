@@ -8,7 +8,7 @@ import shutil
 from sqlalchemy import create_engine
 
 from core.db.database import Database
-from core.db.models import Defaults, Settings, Base, Host
+from core.db.models import Defaults, Base, Host
 from core.proxy_manager import ProxyManager
 from core.event_bus import event_bus
 
@@ -18,7 +18,11 @@ class SettingsPage(QWidget):
         super().__init__(parent)
         self.db = Database()
         self.db.register_callback(self.on_database_changed)  # 注册回调
-        self.proxy_manager = ProxyManager()
+        # 使用父窗口的ProxyManager实例
+        if parent and hasattr(parent, 'proxy_manager'):
+            self.proxy_manager = parent.proxy_manager
+        else:
+            self.proxy_manager = ProxyManager(self.db)
 
         # 标记是否正在加载设置
         self.is_loading = True
@@ -28,6 +32,9 @@ class SettingsPage(QWidget):
 
         # 设置加载完成
         self.is_loading = False
+        
+        # 在初始化完成后才连接信号
+        self.enable_proxy.stateChanged.connect(self.on_proxy_enabled)
 
     def init_ui(self):
         """初始化UI"""
@@ -128,7 +135,6 @@ class SettingsPage(QWidget):
 
         # 启用代理
         self.enable_proxy = QCheckBox("启用代理")
-        self.enable_proxy.stateChanged.connect(self.on_proxy_enabled)
         layout.addRow("", self.enable_proxy)
 
         # 服务器地址
@@ -214,6 +220,20 @@ class SettingsPage(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(10)
 
+        # 用户配置文件信息
+        config_info_layout = QVBoxLayout()
+        config_info_label = QLabel("用户配置文件:")
+        config_info_label.setStyleSheet("font-weight: bold;")
+        config_info_layout.addWidget(config_info_label)
+
+        self.config_file_path_label = QLabel()
+        self.config_file_path_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.config_file_path_label.setWordWrap(True)
+        config_info_layout.addWidget(self.config_file_path_label)
+
+        layout.addLayout(config_info_layout)
+
+        # 存档路径设置
         path_layout = QHBoxLayout()
         path_layout.addWidget(QLabel("基础路径:"))
         self.config_base_path = QLineEdit()
@@ -226,6 +246,42 @@ class SettingsPage(QWidget):
         path_layout.addWidget(self.select_path_btn)
 
         layout.addLayout(path_layout)
+
+        # 数据库路径设置
+        db_path_layout = QHBoxLayout()
+        db_path_layout.addWidget(QLabel("数据库路径:"))
+        self.db_base_path = QLineEdit()
+        self.db_base_path.setPlaceholderText("选择数据库存储路径")
+        db_path_layout.addWidget(self.db_base_path)
+        
+        self.select_db_path_btn = QPushButton("浏览...")
+        self.select_db_path_btn.setFixedWidth(80)
+        self.select_db_path_btn.clicked.connect(self.select_db_path)
+        db_path_layout.addWidget(self.select_db_path_btn)
+        
+        layout.addLayout(db_path_layout)
+
+        # 配置管理按钮
+        config_btn_layout = QHBoxLayout()
+
+        self.reset_config_btn = QPushButton("重置为默认")
+        self.reset_config_btn.setFixedWidth(100)
+        self.reset_config_btn.clicked.connect(self.reset_config_to_defaults)
+        config_btn_layout.addWidget(self.reset_config_btn)
+
+        self.backup_config_btn = QPushButton("备份配置")
+        self.backup_config_btn.setFixedWidth(100)
+        self.backup_config_btn.clicked.connect(self.backup_user_config)
+        config_btn_layout.addWidget(self.backup_config_btn)
+
+        self.restore_config_btn = QPushButton("恢复配置")
+        self.restore_config_btn.setFixedWidth(100)
+        self.restore_config_btn.clicked.connect(self.restore_user_config)
+        config_btn_layout.addWidget(self.restore_config_btn)
+
+        config_btn_layout.addStretch()
+        layout.addLayout(config_btn_layout)
+
         group.setLayout(layout)
         return group
 
@@ -239,27 +295,131 @@ class SettingsPage(QWidget):
         )
         if path:
             self.config_base_path.setText(path)
+            
+    def select_db_path(self):
+        """选择数据库路径"""
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择数据库存储路径",
+            self.db_base_path.text() or os.getcwd(),
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if path:
+            self.db_base_path.setText(path)
+
+    def reset_config_to_defaults(self):
+        """重置配置为默认值"""
+        reply = QMessageBox.question(
+            self,
+            "确认重置",
+            "确定要重置所有配置为默认值吗？\n这将清除所有自定义设置。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                config_manager = self.db.get_config_manager()
+                if config_manager:
+                    config_manager.reset_to_defaults()
+                    QMessageBox.information(self, "成功", "配置已重置为默认值，请重新加载设置。")
+                    self.load_settings()  # 重新加载设置
+                else:
+                    QMessageBox.warning(self, "错误", "无法获取配置管理器")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"重置配置失败: {str(e)}")
+
+    def backup_user_config(self):
+        """备份用户配置文件"""
+        try:
+            config_manager = self.db.get_config_manager()
+            if not config_manager:
+                QMessageBox.warning(self, "错误", "无法获取配置管理器")
+                return
+
+            # 选择备份文件路径
+            backup_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存配置备份",
+                f"nornir-gui-config-backup.ini",
+                "配置文件 (*.ini);;所有文件 (*)"
+            )
+
+            if backup_path:
+                config_manager.backup_config(backup_path)
+                QMessageBox.information(self, "成功", f"配置已备份到: {backup_path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"备份配置失败: {str(e)}")
+
+    def restore_user_config(self):
+        """恢复用户配置文件"""
+        try:
+            # 选择备份文件
+            backup_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择配置备份文件",
+                "",
+                "配置文件 (*.ini);;所有文件 (*)"
+            )
+
+            if backup_path:
+                reply = QMessageBox.question(
+                    self,
+                    "确认恢复",
+                    "确定要从备份文件恢复配置吗？\n这将覆盖当前的所有设置。",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+
+                if reply == QMessageBox.Yes:
+                    config_manager = self.db.get_config_manager()
+                    if config_manager:
+                        config_manager.restore_config(backup_path)
+                        QMessageBox.information(self, "成功", "配置已从备份恢复，请重新加载设置。")
+                        self.load_settings()  # 重新加载设置
+                    else:
+                        QMessageBox.warning(self, "错误", "无法获取配置管理器")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"恢复配置失败: {str(e)}")
 
     def load_settings(self):
         """加载设置"""
         try:
+            # 显示用户配置文件路径
+            config_manager = self.db.get_config_manager()
+            if config_manager:
+                config_file_path = config_manager.get_config_file_path()
+                self.config_file_path_label.setText(f"配置文件位置: {config_file_path}")
+                
+                # 从用户配置文件加载设置
+                proxy_settings = config_manager.get_proxy_settings()
+                self.enable_proxy.setChecked(proxy_settings['enabled'])
+                self.proxy_host.setText(proxy_settings['host'])
+                self.proxy_port.setValue(proxy_settings['port'])
+                
+                # 加载存档路径
+                archive_path = config_manager.get_archive_base_path()
+                self.config_base_path.setText(archive_path)
+                
+                # 加载数据库路径
+                db_path = config_manager.get_database_path()
+                self.db_base_path.setText(db_path)
+                
+                # 加载日志级别
+                log_level = config_manager.get_log_level()
+                self.file_log_combo.setCurrentText(log_level)
+            else:
+                self.config_file_path_label.setText("用户配置文件不可用")
+            
+            # 设置当前数据库显示
+            current_db = self.db.get_current_db_name()
+            self.db_combo.setCurrentText(current_db)
+            
+            # 加载连接设置（仍从数据库加载）
             with Session(self.db.engine) as session:
-                # 设置当前数据库显示
-                current_db = self.db.get_current_db_name()
-                self.db_combo.setCurrentText(current_db)
-
-                # 加载代理设置
-                settings = session.query(Settings).first()
-                if settings:
-                    self.enable_proxy.setChecked(settings.proxy_enabled)
-                    if settings.proxy_host:
-                        self.proxy_host.setText(settings.proxy_host)
-                    if settings.proxy_port:
-                        self.proxy_port.setValue(settings.proxy_port)
-                    if settings.config_base_path:
-                        self.config_base_path.setText(settings.config_base_path)
-                    self.file_log_combo.setCurrentText(settings.log_file_level)
-
+            
                 # 加载连接设置
                 defaults = session.query(Defaults).first()
                 if defaults:
@@ -270,58 +430,65 @@ class SettingsPage(QWidget):
                         self.read_timeout_spin.setValue(defaults.read_timeout)
                     if hasattr(defaults, 'num_workers'):
                         self.workers_spin.setValue(defaults.num_workers)
-
+                
                 # 更新代理控件状态
-                self.on_proxy_enabled(self.enable_proxy.isChecked())
-
+                self.on_proxy_enabled(self.enable_proxy.isChecked(), save_settings=False)
+                
         except Exception as e:
             QMessageBox.warning(self, "错误", f"加载设置失败: {str(e)}")
 
     def save_settings(self):
         """保存设置"""
         try:
-            with Session(self.db.engine) as session:
+            # 验证代理设置
+            if self.enable_proxy.isChecked():
+                proxy_host = self.proxy_host.text().strip()
+                proxy_port = self.proxy_port.value()
+
+                if not proxy_host:
+                    QMessageBox.warning(self, "错误", "请输入代理服务器地址")
+                    self.proxy_host.setFocus()
+                    return
+
+                if proxy_port <= 0:
+                    QMessageBox.warning(self, "错误", "请输入有效的代理端口")
+                    self.proxy_port.setFocus()
+                    return
+
+            # 获取并规范化基础路径
+            base_path = os.path.normpath(self.config_base_path.text().strip())
+
+            # 创建基础目录
+            os.makedirs(base_path, exist_ok=True)
+
+            # 创建必要的子目录
+            from core.config.path_utils import ensure_archive_subdirs
+            ensure_archive_subdirs(self.db)
+
+            # 使用配置管理器保存设置
+            config_manager = self.db.get_config_manager()
+            if config_manager:
                 # 保存代理设置
-                settings = session.query(Settings).first()
-                if not settings:
-                    settings = Settings()
-                    session.add(settings)
-
-                # 获取并规范化基础路径
-                base_path = os.path.normpath(self.config_base_path.text().strip())
-
-                # 创建基础目录
-                os.makedirs(base_path, exist_ok=True)
-
-                # 创建必要的子目录
-                subdirs = ["备份", "对比", "DNAT查询", "接口查询", "MAC-IP查询"]
-                for subdir in subdirs:
-                    dir_path = os.path.normpath(os.path.join(base_path, subdir))
-                    os.makedirs(dir_path, exist_ok=True)
+                config_manager.set_proxy_settings(
+                    enabled=self.enable_proxy.isChecked(),
+                    host=self.proxy_host.text().strip() if self.enable_proxy.isChecked() else '',
+                    port=self.proxy_port.value() if self.enable_proxy.isChecked() else 8080
+                )
 
                 # 保存存档路径
-                settings.config_base_path = base_path or None
+                config_manager.set_archive_base_path(base_path)
 
-                # 保存代理设置
-                if self.enable_proxy.isChecked():
-                    proxy_host = self.proxy_host.text().strip()
-                    proxy_port = self.proxy_port.value()
+                # 保存数据库路径
+                db_path = os.path.normpath(self.db_base_path.text().strip())
+                config_manager.set_database_path(db_path)
 
-                    if not proxy_host:
-                        QMessageBox.warning(self, "错误", "请输入代理服务器地址")
-                        self.proxy_host.setFocus()
-                        return
+                # 保存日志级别
+                config_manager.set_log_level(self.file_log_combo.currentText())
+            else:
+                QMessageBox.warning(self, "警告", "配置管理器不可用，设置可能无法正确保存")
 
-                    if proxy_port <= 0:
-                        QMessageBox.warning(self, "错误", "请输入有效的代理端口")
-                        self.proxy_port.setFocus()
-                        return
-
-                settings.proxy_enabled = self.enable_proxy.isChecked()
-                settings.proxy_host = self.proxy_host.text().strip() if self.enable_proxy.isChecked() else None
-                settings.proxy_port = self.proxy_port.value() if self.enable_proxy.isChecked() else None
-
-                # 保存连接设置
+            # 保存连接设置（仍保存到数据库）
+            with Session(self.db.engine) as session:
                 defaults = session.query(Defaults).first()
                 if not defaults:
                     defaults = Defaults()
@@ -332,9 +499,6 @@ class SettingsPage(QWidget):
                 defaults.fast_cli = self.fast_cli_check.isChecked()
                 defaults.read_timeout = self.read_timeout_spin.value()
                 defaults.num_workers = self.workers_spin.value()
-
-                # 保存日志设置
-                settings.log_file_level = self.file_log_combo.currentText()
 
                 session.commit()
 
@@ -350,14 +514,40 @@ class SettingsPage(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "错误", f"保存设置失败: {str(e)}")
 
-    def on_proxy_enabled(self, enabled):
+    def on_proxy_enabled(self, enabled, save_settings=True):
         """代理启用状态改变时触发"""
         self.proxy_host.setEnabled(enabled)
         self.proxy_port.setEnabled(enabled)
+        
+        # 自动保存代理设置
+        if save_settings:
+            self._save_proxy_settings()
+    
+    def _save_proxy_settings(self):
+        """保存代理设置"""
+        try:
+            # 使用配置管理器保存代理设置
+            config_manager = self.db.get_config_manager()
+            if config_manager:
+                config_manager.set_proxy_settings(
+                    enabled=self.enable_proxy.isChecked(),
+                    host=self.proxy_host.text().strip() if self.enable_proxy.isChecked() else '',
+                    port=self.proxy_port.value() if self.enable_proxy.isChecked() else 8080
+                )
+                # 重新应用代理配置
+                self.proxy_manager.apply_proxy()
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"保存代理设置失败: {str(e)}")
 
     def _load_databases(self):
         """加载可用数据库"""
-        db_dir = os.path.join(os.getcwd(), 'databases')
+        # 从配置管理器获取数据库路径
+        config_manager = self.db.get_config_manager()
+        if config_manager:
+            db_dir = config_manager.get_database_path()
+        else:
+            db_dir = os.path.join(os.getcwd(), 'databases')
+
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
@@ -383,8 +573,6 @@ class SettingsPage(QWidget):
         # 切换到选中的数据库
         success = self.db.switch_database(db_name)
         if success:
-            # 更新最后使用的数据库
-            self.db.update_last_used_db(db_name)
             # 通知其他组件
             event_bus.settings_changed.emit()
         else:
@@ -428,7 +616,6 @@ class SettingsPage(QWidget):
                 # 自动切换到新数据库
                 success = self.db.switch_database(db_name)
                 if success:
-                    self.db.update_last_used_db(db_name)
                     QMessageBox.information(self, "成功", f"数据库 {db_name} 创建成功并已切换")
                     event_bus.settings_changed.emit()
                 else:
@@ -455,9 +642,8 @@ class SettingsPage(QWidget):
                 # 自动切换到新数据库
                 success = self.db.switch_database('default')
                 if success:
-                    self.db.update_last_used_db('default')
                     event_bus.settings_changed.emit()
-
+                
                 return True
             except Exception as e:
                 QMessageBox.warning(self, "错误", f"创建默认数据库失败: {str(e)}")
@@ -652,7 +838,6 @@ class SettingsPage(QWidget):
                     if not success:
                         QMessageBox.warning(self, "错误", f"切换到数据库 {switch_to} 失败，无法删除当前数据库")
                         return
-                    self.db.update_last_used_db(switch_to)
 
                 # 删除数据库文件
                 if os.path.exists(db_path):

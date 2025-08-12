@@ -5,7 +5,7 @@ from PySide6.QtCore import QObject, Signal
 from nornir_netmiko.tasks import netmiko_send_command, netmiko_send_config, netmiko_multiline
 from ..base.nornir_manager import NornirManager
 from core.db.database import Database
-from core.db.models import Settings
+
 from nornir.core.task import Result
 from PySide6.QtCore import QUrl
 
@@ -26,23 +26,9 @@ class CommandSender(QObject):
         self.results = {}  # 存储执行结果
         self.db = Database()
         
-        try:
-            # 获取基础路径
-            with Database().get_session() as session:
-                settings = session.query(Settings).first()
-                if settings and settings.config_base_path:
-                    self.base_path = settings.config_base_path
-                else:
-                    # 如果没有设置或数据库未初始化，使用默认路径
-                    self.base_path = os.path.join(os.getcwd(), "配置文件")
-                    # 创建默认设置
-                    if not settings:
-                        new_settings = Settings(config_base_path=self.base_path)
-                        session.add(new_settings)
-                        session.commit()
-        except Exception as e:
-            logger.warning(f"数据库初始化失败，使用默认配置: {str(e)}")
-            self.base_path = os.path.join(os.getcwd(), "配置文件")
+        # 使用统一的路径获取方法
+        from core.config.path_utils import get_archive_base_path
+        self.base_path = get_archive_base_path(self.db)
             
         # 创建命令回显目录
         self.output_path = os.path.join(self.base_path, "命令回显")

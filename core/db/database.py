@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any, Tuple, Callable
 import logging
 import os
 
-from .models import Base, Host, Settings, Defaults
+from .models import Base, Host, Defaults
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -25,37 +25,55 @@ class Database:
     def __init__(self):
         if self._initialized:
             return
-            
+
         self._initialized = True
-        
-        # 先初始化默认数据库连接，用于读取设置
-        default_db_path = os.path.join(os.getcwd(), 'databases', 'default.db')
-        os.makedirs(os.path.dirname(default_db_path), exist_ok=True)
-        temp_engine = create_engine(f'sqlite:///{default_db_path}')
-        Base.metadata.create_all(temp_engine)
-        
-        # 获取上次使用的数据库
-        with sessionmaker(bind=temp_engine)() as session:
-            settings = session.query(Settings).first()
-            if not settings:
-                # 如果 settings 不存在，创建并设置默认值
-                settings = Settings(last_used_db='default')
-                session.add(settings)
-                session.commit()
-            last_used_db = settings.last_used_db
-        
-        # 关闭临时连接
-        temp_engine.dispose()
-        
+
+        # 尝试从用户配置获取数据库路径和上次使用的数据库
+        try:
+            from ..config import ConfigManager
+            self._config_manager = ConfigManager()
+
+            # 获取数据库基础路径
+            db_base_path = self._config_manager.get_database_path()
+            last_used_db = self._config_manager.get_last_used_db()
+
+            logger.info(f"从用户配置读取数据库路径: {db_base_path}")
+            logger.info(f"从用户配置读取上次使用的数据库: {last_used_db}")
+
+        except Exception as e:
+            logger.warning(f"无法从用户配置读取数据库设置，使用默认设置: {e}")
+            # 回退到默认设置
+            db_base_path = os.path.join(os.getcwd(), 'databases')
+            last_used_db = 'default'
+            self._config_manager = None
+
+        # 确保数据库目录存在
+        os.makedirs(db_base_path, exist_ok=True)
+
+
         # 初始化实际使用的数据库
-        db_path = os.path.join(os.getcwd(), 'databases', f'{last_used_db}.db')
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db_path = os.path.join(db_base_path, f'{last_used_db}.db')
+        
+        # 检查数据库是否存在，如果不存在则回退到默认数据库
+        if not os.path.exists(db_path):
+            logger.warning(f"配置的数据库 {last_used_db} 不存在，回退到默认数据库")
+            last_used_db = 'default'
+            db_path = os.path.join(db_base_path, f'{last_used_db}.db')
+            # 更新用户配置中的 last_used_db
+            if self._config_manager:
+                self._config_manager.set_last_used_db(last_used_db)
+        
         self._current_db = db_path
         self.engine = create_engine(f'sqlite:///{self._current_db}')
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
         self.init_db()
         self._callbacks = []  # 用于存储回调函数
+
+        # 设置配置管理器的数据库回退
+        if self._config_manager:
+            self._config_manager.set_database_fallback(self)
+
 
     def register_callback(self, callback: Callable):
         """注册数据库切换回调"""
@@ -71,29 +89,36 @@ class Database:
         try:
             # 关闭当前连接
             self.engine.dispose()
-            
+
+            # 获取数据库基础路径
+            if self._config_manager:
+                db_base_path = self._config_manager.get_database_path()
+            else:
+                db_base_path = os.path.join(os.getcwd(), 'databases')
+
             # 构建新数据库路径
-            new_db_path = os.path.join(os.getcwd(), 'databases', f'{db_name}.db')
-            
+            new_db_path = os.path.join(db_base_path, f'{db_name}.db')
+
             # 如果数据库不存在，则创建
             if not os.path.exists(new_db_path):
                 os.makedirs(os.path.dirname(new_db_path), exist_ok=True)
                 temp_engine = create_engine(f'sqlite:///{new_db_path}')
                 Base.metadata.create_all(temp_engine)
                 temp_engine.dispose()
-            
+
             # 切换到新数据库
             self._current_db = new_db_path
             self.engine = create_engine(f'sqlite:///{self._current_db}')
             self.Session = sessionmaker(bind=self.engine)
-            
-            # 更新所有数据库的 last_used_db
-            self.update_last_used_db(db_name)
-            
+
+            # 更新用户配置中的 last_used_db
+            if self._config_manager:
+                self._config_manager.set_last_used_db(db_name)
+
             # 切换成功后调用所有回调
             for callback in self._callbacks:
                 callback()
-                
+
             logger.info(f"成功切换到数据库: {db_name}")
             return True
         except Exception as e:
@@ -103,7 +128,12 @@ class Database:
 
     def _recover_to_default(self):
         """恢复到默认数据库"""
-        default_db_path = os.path.join(os.getcwd(), 'databases', 'default.db')
+        if self._config_manager:
+            db_base_path = self._config_manager.get_database_path()
+        else:
+            db_base_path = os.path.join(os.getcwd(), 'databases')
+
+        default_db_path = os.path.join(db_base_path, 'default.db')
         self.engine = create_engine(f'sqlite:///{default_db_path}')
         self.Session = sessionmaker(bind=self.engine)
         self._current_db = default_db_path
@@ -112,6 +142,10 @@ class Database:
     def get_current_db_name(self) -> str:
         """获取当前数据库名称"""
         return os.path.basename(self._current_db).replace('.db', '')
+
+    def get_config_manager(self):
+        """获取配置管理器"""
+        return self._config_manager
 
     def get_session(self) -> Session:
         """获取数据库会话"""
@@ -126,10 +160,6 @@ class Database:
                 if not session.query(Defaults).first():
                     defaults = Defaults()
                     session.add(defaults)
-                # 初始化程序设置
-                if not session.query(Settings).first():
-                    settings = Settings(last_used_db='default')  # 确保设置默认值
-                    session.add(settings)
                 session.commit()
             logger.info("数据库初始化成功")
         except SQLAlchemyError as e:
@@ -266,39 +296,6 @@ class Database:
             session.rollback()
             return 0
 
-    # Settings表操作
-    def get_settings(self) -> Dict[str, Any]:
-        """获取程序设置"""
-        with self.get_session() as session:
-            settings = session.query(Settings).first()
-            if not settings:
-                settings = Settings()
-                session.add(settings)
-                session.commit()
-            return {
-                'proxy_enabled': settings.proxy_enabled,
-                'proxy_host': settings.proxy_host,
-                'proxy_port': settings.proxy_port,
-                'config_base_path': settings.config_base_path
-            }
-
-    def update_settings(self, settings_data: Dict[str, Any]) -> bool:
-        """更新程序设置"""
-        try:
-            with self.get_session() as session:
-                settings = session.query(Settings).first()
-                if not settings:
-                    settings = Settings()
-                    session.add(settings)
-                
-                for key, value in settings_data.items():
-                    setattr(settings, key, value)
-                session.commit()
-                logger.info("更新程序设置成功")
-                return True
-        except SQLAlchemyError as e:
-            logger.error(f"更新程序设置失败: {str(e)}")
-            return False
 
     # Defaults表操作
     def get_defaults(self) -> Dict[str, Any]:
@@ -333,44 +330,15 @@ class Database:
             logger.error(f"更新默认配置失败: {str(e)}")
             return False
 
-    def update_last_used_db(self, db_name: str) -> bool:
-        """更新所有数据库中的最后使用数据库设置"""
-        try:
-            # 获取所有数据库文件
-            db_dir = os.path.join(os.getcwd(), 'databases')
-            db_files = [f for f in os.listdir(db_dir) if f.endswith('.db')]
-            
-            for db_file in db_files:
-                db_path = os.path.join(db_dir, db_file)
-                engine = create_engine(f'sqlite:///{db_path}')
-                with sessionmaker(bind=engine)() as session:
-                    settings = session.query(Settings).first()
-                    if not settings:
-                        settings = Settings()
-                        session.add(settings)
-                    settings.last_used_db = db_name
-                    session.commit()
-                engine.dispose()
-            
-            return True
-        except Exception as e:
-            logger.error(f"更新最后使用的数据库失败: {str(e)}")
-            return False
 
     def ensure_initialized(self):
         """确保数据库已初始化"""
         try:
             with self.get_session() as session:
-                # 检查设置表是否存在
-                settings = session.query(Settings).first()
-                if not settings:
-                    # 创建默认设置
-                    default_settings = Settings(
-                        config_base_path=os.path.join(os.getcwd(), "配置文件")
-                    )
-                    session.add(default_settings)
+                # 检查默认配置表是否存在
+                if not session.query(Defaults).first():
+                    defaults = Defaults()
+                    session.add(defaults)
                     session.commit()
         except Exception as e:
             logger.error(f"数据库初始化检查失败: {str(e)}")
-            # 确保数据库文件和表结构存在
-            self.create_all() 

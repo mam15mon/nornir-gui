@@ -7,7 +7,6 @@ from datetime import datetime
 from nornir_netmiko.tasks import netmiko_send_command
 from nornir.core.task import Task, Result
 from core.db.database import Database
-from core.db.models import Settings
 from core.utils.logger import log_operation, handle_error
 from .base import BaseOperation
 
@@ -135,15 +134,10 @@ class InterfaceQuery(BaseOperation):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        
-        # 获取基础路径
-        with Database().get_session() as session:
-            settings = session.query(Settings).first()
-            self.base_path = settings.config_base_path if settings and settings.config_base_path else os.path.join(os.getcwd(), "配置文件")
-            
-        # 创建查询结果目录
-        self.output_path = os.path.normpath(os.path.join(self.base_path, "接口查询"))
-        os.makedirs(self.output_path, exist_ok=True)
+
+        # 使用统一的路径获取方法
+        from core.config.path_utils import get_archive_subdir_path
+        self.output_path = get_archive_subdir_path("接口查询", self.db)
 
     def _process_device_data(self, device_name: str, device, result: Result) -> pd.DataFrame:
         """处理设备数据并返回DataFrame"""
@@ -355,10 +349,10 @@ class InterfaceQuery(BaseOperation):
             
             # 获取基础路径并生成报告
             logger.info("生成接口状态报告...")
-            with self.db.get_session() as session:
-                settings = session.query(Settings).first()
-                base_path = settings.config_base_path if settings and settings.config_base_path else os.path.join(os.getcwd(), "接口查询")
-                output_dir = os.path.normpath(os.path.join(base_path, "接口查询"))
+            # 使用配置管理器获取存档基础路径
+            from core.config.path_utils import get_archive_base_path
+            base_path = get_archive_base_path(self.db)
+            output_dir = os.path.normpath(os.path.join(base_path, "接口查询"))
             
             os.makedirs(output_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

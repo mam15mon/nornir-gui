@@ -31,9 +31,38 @@ def init_locale() -> None:
 def init_database() -> None:
     """初始化数据库"""
     try:
-        Database()
+        db = Database()
+        # 检查配置健康状态
+        check_config_health(db)
     except (ImportError, RuntimeError) as e:
         logger.error("数据库初始化失败: %s", str(e))
+
+def check_config_health(db) -> None:
+    """检查配置健康状态"""
+    try:
+        config_manager = db.get_config_manager()
+        if not config_manager:
+            logger.warning("配置管理器不可用")
+            return
+
+        # 进行配置健康检查
+        health_status = config_manager.check_config_health()
+        logger.info(f"配置健康状态: {health_status['overall_status']}")
+
+        if health_status['overall_status'] == 'error':
+            logger.warning("检测到配置问题，尝试自动修复")
+            if config_manager.auto_repair_config():
+                logger.info("配置自动修复成功")
+            else:
+                logger.error("配置自动修复失败，可能需要手动干预")
+
+        # 检查后再次检查健康状态
+        final_health = config_manager.check_config_health()
+        if final_health['overall_status'] != 'healthy':
+            logger.warning(f"配置仍有问题: {final_health['issues']}")
+
+    except Exception as e:
+        logger.error(f"配置检查过程中发生错误: {e}")
 
 def get_app_icon_path() -> Path:
     """获取应用图标路径"""

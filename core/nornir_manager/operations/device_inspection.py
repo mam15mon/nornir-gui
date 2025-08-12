@@ -5,7 +5,7 @@ from PySide6.QtCore import QObject, Signal
 from nornir_netmiko.tasks import netmiko_send_command
 from ..base.nornir_manager import NornirManager
 from core.db.database import Database
-from core.db.models import Settings
+
 from nornir.core.task import Result
 from core.device_inspector import DeviceInspector
 from datetime import datetime
@@ -32,13 +32,9 @@ class DeviceInspection(QObject):
 
     def _init_paths(self):
         """初始化输出路径"""
-        with self.db.get_session() as session:
-            settings = session.query(Settings).first()
-            self.base_path = settings.config_base_path if settings and settings.config_base_path else os.path.join(os.getcwd(), "设备巡检")
-
-        # 创建巡检结果目录
-        self.output_path = os.path.join(self.base_path, "巡检结果")
-        os.makedirs(self.output_path, exist_ok=True)
+        # 使用统一的路径获取方法
+        from core.config.path_utils import get_archive_subdir_path
+        self.output_path = get_archive_subdir_path("巡检结果", self.db)
 
     def _validate_device(self, device):
         """验证设备数据是否完整"""

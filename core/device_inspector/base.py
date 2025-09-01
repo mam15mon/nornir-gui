@@ -1,8 +1,11 @@
 import re
 import os
 import concurrent.futures
+import logging
 from typing import Dict, List
 from abc import ABC, abstractmethod
+
+logger = logging.getLogger(__name__)
 
 class DeviceInspector(ABC):
     """设备检测基类"""
@@ -96,7 +99,7 @@ class DeviceInspector(ABC):
             return "unknown"
 
         except Exception as e:
-            print(f"设备类型检测出错: {e}")
+            logger.error(f"设备类型检测出错: {e}")
             return "unknown"
 
     @staticmethod
@@ -111,7 +114,7 @@ class DeviceInspector(ABC):
                 return H3CInspector()
             return None
         except Exception as e:
-            print(f"创建检测器实例出错: {e}")
+            logger.error(f"创建检测器实例出错: {e}")
             return None
 
     @staticmethod
@@ -134,7 +137,7 @@ class DeviceInspector(ABC):
 
                         # 检测设备类型
                         device_type = DeviceInspector.detect_device_type(content)
-                        print(f"文件: {file_path}, 检测到设备类型: {device_type}")
+                        logger.debug(f"文件: {file_path}, 检测到设备类型: {device_type}")
 
                         # 创建对应的检测器
                         inspector = DeviceInspector.create_inspector(device_type)
@@ -148,10 +151,10 @@ class DeviceInspector(ABC):
                                 "results": result
                             })
                         else:
-                            print(f"设备非华为、H3C设备: {file_path}")
+                            logger.debug(f"设备非华为、H3C设备: {file_path}")
 
                 except Exception as e:
-                    print(f"无法读取文件 {file_path}: {e}")
+                    logger.error(f"无法读取文件 {file_path}: {e}")
 
         return results
 
@@ -171,7 +174,7 @@ class DeviceInspector(ABC):
 
                 # 检测设备类型
                 device_type = DeviceInspector.detect_device_type(content)
-                print(f"文件: {file_path}, 检测到设备类型: {device_type}")
+                logger.debug(f"文件: {file_path}, 检测到设备类型: {device_type}")
 
                 # 创建对应的检测器
                 inspector = DeviceInspector.create_inspector(device_type)
@@ -186,7 +189,7 @@ class DeviceInspector(ABC):
                         "success": True
                     }
                 else:
-                    print(f"设备非华为、H3C设备: {file_path}")
+                    logger.debug(f"设备非华为、H3C设备: {file_path}")
                     return {
                         "file_path": file_path,
                         "device_type": "unknown",
@@ -196,7 +199,7 @@ class DeviceInspector(ABC):
 
         except Exception as e:
             error_msg = f"无法读取文件 {file_path}: {e}"
-            print(error_msg)
+            logger.error(error_msg)
             return {
                 "file_path": file_path,
                 "device_type": "unknown",

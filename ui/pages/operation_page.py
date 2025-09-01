@@ -1,8 +1,11 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QDialog, QGroupBox, QLabel, QStatusBar)
 from datetime import datetime
+import logging
 
 from ..widgets.device_list.device_table import DeviceTable
+
+logger = logging.getLogger(__name__)
 from ..widgets.filters.filter_bar import FilterBar
 from ..widgets.filters.search_bar import SearchBar
 from ..widgets.device_list.device_manager import DeviceManager
@@ -118,9 +121,9 @@ class OperationPage(QWidget):
             dialog = ResultDialog(operation_name, results, start_time, self)
             dialog.exec()
         except KeyboardInterrupt:
-            print("操作被用户中断")
+            logger.info("操作被用户中断")
         except Exception as e:
-            print(f"显示结果对话框时发生错误: {str(e)}")
+            logger.error(f"显示结果对话框时发生错误: {str(e)}")
         if not self.thread_manager.has_running_threads():
             self.stop_btn.setEnabled(False)
 

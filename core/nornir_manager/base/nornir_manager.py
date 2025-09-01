@@ -4,6 +4,7 @@ from nornir.core.plugins.inventory import InventoryPluginRegister
 from sqlalchemy.orm import Session
 from core.db.database import Database
 from core.db.models import Defaults
+from core.base.singleton import SingletonBase
 from .inventory import FlatDataInventory
 import logging
 import sys
@@ -19,29 +20,16 @@ def encode_task_name(task_function):
         # 如果第一个参数是 Task 对象
         if args and isinstance(args[0], Task):
             task = args[0]
-            # 编码任务名称
-            task.name = task.name.encode('utf-8').decode('utf-8')
-            # 编码主机名称
-            task.host.name = task.host.name.encode('utf-8').decode('utf-8')
+            # 任务名称和主机名称编码已在数据层面处理
+            # 不需要在这里进行编码转换
         return task_function(*args, **kwargs)
     return wrapper
 
-class NornirManager:
+class NornirManager(SingletonBase):
     """Nornir管理器基础类"""
     
-    _instance = None  # 单例实例
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
-            
-        self._initialized = True
+    def _initialize(self):
+        """初始化Nornir管理器"""
         self.nr = None  # nornir 实例
         self.db = Database()  # 数据库实例
         
@@ -95,11 +83,7 @@ class NornirManager:
             original_task = Task.copy
             def wrapped_copy(self, *args, **kwargs):
                 result = original_task(self, *args, **kwargs)
-                if hasattr(result, 'name'):
-                    try:
-                        result.name = result.name.encode('utf-8').decode('utf-8')
-                    except Exception:
-                        pass
+                # 任务名称编码已在数据层面处理，不需要在这里转换
                 return result
             Task.copy = wrapped_copy
             
@@ -112,13 +96,10 @@ class NornirManager:
             return None
     
     def _wrap_close_connections(self, close_func):
-        """包装 close_connections 函数以处理编码"""
+        """包装 close_connections 函数"""
         @wraps(close_func)
         def wrapper(*args, **kwargs):
-            # 确保所有主机名使用正确编码
-            if self.nr:
-                for host in self.nr.inventory.hosts.values():
-                    host.name = host.name.encode('utf-8').decode('utf-8')
+            # 主机名编码已在数据层面处理，不需要在这里转换
             return close_func(*args, **kwargs)
         return wrapper
     
@@ -131,9 +112,6 @@ class NornirManager:
     def close(self):
         """关闭 nornir 连接"""
         if self.nr:
-            # 确保所有主机名都使用 utf-8 编码
-            for host in self.nr.inventory.hosts.values():
-                host.name = host.name.encode('utf-8').decode('utf-8')
-            
+            # 主机名编码已在数据层面处理，不需要在这里转换
             self.nr.close_connections()
             self.nr = None 

@@ -1,6 +1,9 @@
 import os
 import subprocess
 import sys
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FileHandler:
     """文件处理工具类"""
@@ -16,6 +19,6 @@ class FileHandler:
                     subprocess.run(['open', file_path] if sys.platform == 'darwin' else ['xdg-open', file_path])
                 return True
         except Exception as e:
-            print(f"打开文件失败: {str(e)}")
+            logger.error(f"打开文件失败: {str(e)}")
             return False
         return False

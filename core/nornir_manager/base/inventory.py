@@ -91,8 +91,8 @@ def _get_host_obj(data: Dict[str, Any]) -> Host:
         raise ValueError('主机地址不能为空')
         
     # 确保名称使用正确的编码
-    name = str(data['name']).encode('utf-8').decode('utf-8')
-    hostname = str(data['hostname']).encode('utf-8').decode('utf-8')
+    name = str(data['name'])
+    hostname = str(data['hostname'])
     port = int(data['port']) if not _empty(data.get('port')) else 22
     username = str(data['username']) if not _empty(data.get('username')) else None
     password = str(data['password']) if not _empty(data.get('password')) else None
@@ -176,12 +176,12 @@ class FlatDataInventory:
         for device in self.data:
             try:
                 # 确保所有文本数据使用正确的编码
-                device_name = device.name.encode('utf-8').decode('utf-8')
-                hostname = device.hostname.encode('utf-8').decode('utf-8')
-                platform = device.platform.encode('utf-8').decode('utf-8') if device.platform else None
-                site = device.site.encode('utf-8').decode('utf-8') if device.site else None
-                device_type = device.device_type.encode('utf-8').decode('utf-8') if device.device_type else None
-                device_model = device.device_model.encode('utf-8').decode('utf-8') if device.device_model else None
+                device_name = device.name
+                hostname = device.hostname
+                platform = device.platform if device.platform else None
+                site = device.site if device.site else None
+                device_type = device.device_type if device.device_type else None
+                device_model = device.device_model if device.device_model else None
                 
                 # 创建连接选项
                 connection_options = {

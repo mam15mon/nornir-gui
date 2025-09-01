@@ -3,6 +3,9 @@ from PySide6.QtWidgets import (QTableWidget, QTableWidgetItem, QHeaderView,
                                QLabel, QFrame, QVBoxLayout)
 from PySide6.QtCore import Qt, Signal, QRect
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CheckBoxHeader(QHeaderView):
     """带复选框的表头"""
@@ -335,7 +338,7 @@ class DeviceTable(QTableWidget):
         try:
             self.filtered_devices.sort(key=get_sort_key, reverse=reverse)
         except Exception as e:
-            print(f"Error during sorting: {e}")
+            logger.error(f"排序时发生错误: {e}")
 
     def refresh_table(self):
         """刷新表格数据 (增加保持选中状态的逻辑)"""

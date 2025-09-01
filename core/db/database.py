@@ -7,26 +7,18 @@ import logging
 import os
 
 from .models import Base, Host, Defaults
+from ..base.singleton import SingletonBase
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class Database:
-    _instance = None  # 单例实例
-    _current_db = None  # 当前数据库路径
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
-    def __init__(self):
-        if self._initialized:
-            return
-
-        self._initialized = True
+class Database(SingletonBase):
+    """数据库单例类"""
+    
+    def _initialize(self):
+        """初始化数据库"""
+        self._current_db = None  # 当前数据库路径
 
         # 尝试从用户配置获取数据库路径和上次使用的数据库
         try:
@@ -40,7 +32,7 @@ class Database:
             logger.info(f"从用户配置读取数据库路径: {db_base_path}")
             logger.info(f"从用户配置读取上次使用的数据库: {last_used_db}")
 
-        except Exception as e:
+        except (ImportError, AttributeError, OSError) as e:
             logger.warning(f"无法从用户配置读取数据库设置，使用默认设置: {e}")
             # 回退到默认设置
             db_base_path = os.path.join(os.getcwd(), 'databases')

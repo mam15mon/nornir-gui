@@ -81,3 +81,13 @@ env/
 #临时文件
 .claude/
 .github/
+
+# 测试相关
+tests/__pycache__/
+tests/.pytest_cache/
+reports/
+htmlcov/
+.coverage
+.pytest_cache/
+.cache/
+.tox/

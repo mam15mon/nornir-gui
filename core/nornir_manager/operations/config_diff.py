@@ -112,7 +112,7 @@ class ConfigDiff(BaseOperation):
                     f.write(''.join(diff_content))
                 
                 # 生成相对路径用于显示
-                rel_path = os.path.relpath(diff_file, self.base_path)
+                rel_path = os.path.relpath(diff_file, self.diff_path)
                 status = "成功: 发现配置差异"
                 logger.info(f"{device_name} - 配置差异已保存到: {rel_path}")
                 self.status_changed.emit(device_name, status)

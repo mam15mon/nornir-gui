@@ -19,7 +19,8 @@ class ConfigBackup(BaseOperation):
         self.db = Database()
 
         # 使用统一的路径获取方法
-        from core.config.path_utils import get_archive_subdir_path
+        from core.config.path_utils import get_archive_base_path, get_archive_subdir_path
+        self.base_path = get_archive_base_path(self.db)
         self.backup_path = get_archive_subdir_path("备份", self.db)
     
     def backup_config(self, task: Task) -> Result:

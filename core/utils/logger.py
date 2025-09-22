@@ -66,24 +66,47 @@ def cleanup_old_logs(log_dir: str, days: int = 7):
 
 def setup_logging():
     """配置日志系统"""
-    # 确保日志目录存在
+    # 默认日志目录与级别
     log_dir = os.path.abspath('logs')
+    log_level = logging.INFO
+
+    # 从用户配置读取日志目录与级别
     try:
-        # 创建日志目录
+        from core.config.user_config import UserConfigManager
+        user_config = UserConfigManager()
+
+        try:
+            configured_log_dir = user_config.get_log_path()
+            if configured_log_dir:
+                log_dir = configured_log_dir
+        except Exception as e:
+            print(f"读取日志路径设置失败: {e}")
+
+        try:
+            log_level_str = user_config.get_log_level()
+            log_level = get_log_level(log_level_str)
+        except Exception as e:
+            print(f"读取日志级别设置失败: {e}")
+
+    except Exception as e:
+        print(f"读取用户配置失败: {e}")
+
+    # 确保日志目录存在
+    try:
         os.makedirs(log_dir, mode=0o777, exist_ok=True)
     except Exception as e:
-        # 如果无法写入 logs 目录，使用临时目录
+        # 如果无法写入指定目录，使用临时目录
         print(f"无法写入日志目录 {log_dir}: {e}")
         log_dir = os.path.join(tempfile.gettempdir(), 'nornir_gui_logs')
         os.makedirs(log_dir, exist_ok=True)
-    
+
     # 清理旧日志文件
     cleanup_old_logs(log_dir)
-    
+
     # 生成带日期的日志文件路径
     current_date = datetime.now().strftime("%Y%m%d")
     log_file = os.path.join(log_dir, f'nornir_gui_{current_date}.log')
-    
+
     # 配置日志格式
     formatter = logging.Formatter(
         '%(asctime)s [%(levelname)-8s] %(name)s:%(lineno)d - %(message)s',
@@ -91,16 +114,6 @@ def setup_logging():
     )
 
     try:
-        # 获取用户配置中的日志级别设置
-        try:
-            from core.config.user_config import UserConfigManager
-            user_config = UserConfigManager()
-            log_level_str = user_config.get_log_level()
-            log_level = get_log_level(log_level_str)
-        except Exception as e:
-            print(f"读取日志级别设置失败: {e}")
-            log_level = logging.INFO  # 如果无法读取设置，默认使用 INFO 级别
-        
         # 创建文件处理器 - 使用 RotatingFileHandler
         file_handler = RotatingFileHandler(
             log_file,
@@ -110,25 +123,25 @@ def setup_logging():
         )
         file_handler.setFormatter(formatter)
         file_handler.setLevel(log_level)
-        
+
         # 创建控制台处理器
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
         console_handler.setLevel(log_level)
-        
+
         # 配置根日志记录器
         root_logger = logging.getLogger()
         root_logger.setLevel(log_level)
-        
+
         # 清除现有处理器
         root_logger.handlers.clear()
-        
+
         # 添加新的处理器
         root_logger.addHandler(file_handler)
         root_logger.addHandler(console_handler)
-        
+
         root_logger.info(f"日志系统初始化成功，日志文件: {log_file}，日志级别: {logging.getLevelName(log_level)}")
-        
+
     except Exception as e:
         print(f"日志系统初始化失败: {e}")
         # 仅使用控制台日志

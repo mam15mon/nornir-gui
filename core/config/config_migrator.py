@@ -58,6 +58,13 @@ class ConfigMigrator:
                 self.user_config.set_last_used_db(last_db)
                 logger.info(f"上次使用的数据库已迁移: {last_db}")
             
+            # 迁移日志路径
+            if 'log_path' in db_settings:
+                log_path = db_settings.get('log_path')
+                if log_path:
+                    self.user_config.set_log_path(log_path)
+                    logger.info(f"日志路径已迁移: {log_path}")
+
             # 迁移日志级别
             if 'log_file_level' in db_settings:
                 log_level = db_settings.get('log_file_level', 'INFO')
@@ -192,7 +199,19 @@ class ConfigManager:
     def set_database_path(self, path: str):
         """设置数据库路径"""
         self.user_config.set_database_path(path)
-    
+
+    def get_log_path(self) -> str:
+        """获取日志路径"""
+        try:
+            return self.user_config.get_log_path()
+        except Exception as e:
+            logger.warning(f"从用户配置读取日志路径失败: {e}")
+            return os.path.abspath('logs')
+
+    def set_log_path(self, path: str):
+        """设置日志路径"""
+        self.user_config.set_log_path(path)
+
     def get_last_used_db(self) -> str:
         """获取上次使用的数据库名称"""
         try:
@@ -305,6 +324,7 @@ class ConfigManager:
                 self.get_proxy_settings()
                 self.get_archive_base_path()
                 self.get_database_path()
+                self.get_log_path()
                 self.get_last_used_db()
                 self.get_log_level()
             except Exception as e:

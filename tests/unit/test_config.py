@@ -80,6 +80,25 @@ class TestUserConfigManager:
             
             # 验证路径已更新
             assert config_manager.get_database_path() == new_path
+
+    def test_get_log_path(self, temp_dir):
+        """测试获取日志路径"""
+        with patch('os.path.expanduser', return_value=temp_dir):
+            config_manager = UserConfigManager()
+
+            log_path = config_manager.get_log_path()
+            assert os.path.isabs(log_path)
+            assert log_path.endswith("logs")
+
+    def test_set_log_path(self, temp_dir):
+        """测试设置日志路径"""
+        with patch('os.path.expanduser', return_value=temp_dir):
+            config_manager = UserConfigManager()
+
+            custom_log_path = os.path.join(temp_dir, "custom_logs")
+            config_manager.set_log_path(custom_log_path)
+
+            assert config_manager.get_log_path() == custom_log_path
     
     def test_get_last_used_db(self, temp_dir):
         """测试获取上次使用的数据库"""

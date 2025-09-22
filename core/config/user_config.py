@@ -26,6 +26,15 @@ class UserConfigManager:
         self._config = configparser.ConfigParser()
         self._ensure_config_dir()
         self._load_config()
+
+    def _get_default_log_path(self) -> str:
+        """获取默认日志目录路径"""
+        try:
+            project_root = Path(__file__).resolve().parents[2]
+        except Exception:
+            project_root = Path.cwd()
+
+        return str((project_root / "logs").resolve())
     
     def _get_config_dir(self) -> Path:
         """获取配置目录路径，支持跨平台"""
@@ -107,6 +116,9 @@ class UserConfigManager:
         # 默认数据库路径在用户配置目录下
         default_db_path = str(self._config_dir / "databases")
         self._config.set('paths', 'database_path', default_db_path)
+        # 默认日志路径位于项目 logs 目录
+        default_log_path = self._get_default_log_path()
+        self._config.set('paths', 'log_path', default_log_path)
         
         # 应用设置
         self._config.add_section('app')
@@ -150,6 +162,11 @@ class UserConfigManager:
                 if archive_path and not os.path.isabs(archive_path):
                     logger.warning(f"存档路径不是绝对路径: {archive_path}")
                     # 这不是致命错误，只是警告
+
+            if self._config.has_option('paths', 'log_path'):
+                log_path = self._config.get('paths', 'log_path')
+                if log_path and not os.path.isabs(log_path):
+                    logger.warning(f"日志路径不是绝对路径: {log_path}")
 
             return True
 
@@ -246,7 +263,7 @@ class UserConfigManager:
         """获取存档基础路径"""
         return self._config.get('paths', 'archive_base_path', 
                                fallback=str(Path.home() / "nornir-gui-files"))
-    
+
     def set_archive_base_path(self, path: str):
         """设置存档基础路径"""
         if not self._config.has_section('paths'):
@@ -259,13 +276,28 @@ class UserConfigManager:
         """获取数据库路径"""
         return self._config.get('paths', 'database_path',
                                fallback=str(self._config_dir / "databases"))
-    
+
     def set_database_path(self, path: str):
         """设置数据库路径"""
         if not self._config.has_section('paths'):
             self._config.add_section('paths')
-        
+
         self._config.set('paths', 'database_path', path)
+        self._save_config()
+
+    def get_log_path(self) -> str:
+        """获取日志输出路径"""
+        log_path = self._config.get('paths', 'log_path', fallback=self._get_default_log_path())
+        return os.path.abspath(log_path)
+
+    def set_log_path(self, path: str):
+        """设置日志输出路径"""
+        if not self._config.has_section('paths'):
+            self._config.add_section('paths')
+
+        normalized_path = os.path.abspath(path)
+
+        self._config.set('paths', 'log_path', normalized_path)
         self._save_config()
     
     # 应用设置相关方法
@@ -391,9 +423,12 @@ class UserConfigManager:
                     archive_path = self._config.get('paths', 'archive_base_path', fallback='')
                     db_path = self._config.get('paths', 'database_path', fallback='')
 
+                    log_path = self._config.get('paths', 'log_path', fallback='')
+
                     recovered_settings['paths'] = {
                         'archive_base_path': archive_path,
-                        'database_path': db_path
+                        'database_path': db_path,
+                        'log_path': log_path
                     }
                 except:
                     pass
@@ -427,6 +462,8 @@ class UserConfigManager:
                         self.set_archive_base_path(settings['archive_base_path'])
                     if settings.get('database_path'):
                         self.set_database_path(settings['database_path'])
+                    if settings.get('log_path'):
+                        self.set_log_path(settings['log_path'])
                 elif section == 'app':
                     if settings.get('last_used_db'):
                         self.set_last_used_db(settings['last_used_db'])

@@ -91,3 +91,7 @@ htmlcov/
 .pytest_cache/
 .cache/
 .tox/
+
+# claude
+claude.md
+.github/

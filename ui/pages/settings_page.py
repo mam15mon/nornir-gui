@@ -247,6 +247,20 @@ class SettingsPage(QWidget):
 
         layout.addLayout(path_layout)
 
+        # 日志路径设置
+        log_path_layout = QHBoxLayout()
+        log_path_layout.addWidget(QLabel("日志路径:"))
+        self.log_path = QLineEdit()
+        self.log_path.setPlaceholderText("选择日志存储路径")
+        log_path_layout.addWidget(self.log_path)
+
+        self.select_log_path_btn = QPushButton("浏览...")
+        self.select_log_path_btn.setFixedWidth(80)
+        self.select_log_path_btn.clicked.connect(self.select_log_path)
+        log_path_layout.addWidget(self.select_log_path_btn)
+
+        layout.addLayout(log_path_layout)
+
         # 数据库路径设置
         db_path_layout = QHBoxLayout()
         db_path_layout.addWidget(QLabel("数据库路径:"))
@@ -296,6 +310,17 @@ class SettingsPage(QWidget):
         if path:
             self.config_base_path.setText(path)
             
+    def select_log_path(self):
+        """选择日志存储路径"""
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择日志存储路径",
+            self.log_path.text() or os.getcwd(),
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if path:
+            self.log_path.setText(path)
+
     def select_db_path(self):
         """选择数据库路径"""
         path = QFileDialog.getExistingDirectory(
@@ -402,7 +427,11 @@ class SettingsPage(QWidget):
                 # 加载存档路径
                 archive_path = config_manager.get_archive_base_path()
                 self.config_base_path.setText(archive_path)
-                
+
+                # 加载日志路径
+                log_path = config_manager.get_log_path()
+                self.log_path.setText(log_path)
+
                 # 加载数据库路径
                 db_path = config_manager.get_database_path()
                 self.db_base_path.setText(db_path)
@@ -461,6 +490,18 @@ class SettingsPage(QWidget):
             # 创建基础目录
             os.makedirs(base_path, exist_ok=True)
 
+            # 获取日志路径
+            raw_log_path = self.log_path.text().strip()
+
+            if not raw_log_path:
+                QMessageBox.warning(self, "错误", "请输入日志存储路径")
+                self.log_path.setFocus()
+                return
+
+            log_path = os.path.normpath(raw_log_path)
+
+            os.makedirs(log_path, exist_ok=True)
+
             # 创建必要的子目录
             from core.config.path_utils import ensure_archive_subdirs
             ensure_archive_subdirs(self.db)
@@ -477,6 +518,9 @@ class SettingsPage(QWidget):
 
                 # 保存存档路径
                 config_manager.set_archive_base_path(base_path)
+
+                # 保存日志路径
+                config_manager.set_log_path(log_path)
 
                 # 保存数据库路径
                 db_path = os.path.normpath(self.db_base_path.text().strip())

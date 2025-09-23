@@ -177,52 +177,74 @@ class InterfaceQuery(BaseOperation):
             self.results[device_name] = handle_error(device_name, e, "转换为 DataFrame 失败")
             raise
 
+
     def _generate_speed_summary(self, device_results: Dict) -> pd.DataFrame:
         """生成速率汇总表"""
         summary_data = []
         total_up = {speed: 0 for speed in SPEED_ORDER}
         total_count = {speed: 0 for speed in SPEED_ORDER}
-        
+
         for device_name, result in device_results.items():
-            if 'df' not in result or not isinstance(result['df'], pd.DataFrame):
+            df = result.get('df')
+            if not isinstance(df, pd.DataFrame) or df.empty:
                 continue
-                
-            df = result['df']
+
+            interface_column = '接口' if '接口' in df.columns else None
+            if interface_column is None and 'INTERFACE' in df.columns:
+                interface_column = 'INTERFACE'
+            if interface_column is None:
+                continue
+
+            normalized_interfaces = df[interface_column].astype(str).str.upper()
+            df = df[~normalized_interfaces.str.startswith(('M-ETH', 'MGE'))].copy()
+            if df.empty:
+                continue
+
+            if interface_column != '接口' and '接口' not in df.columns and 'INTERFACE' in df.columns:
+                df = df.rename(columns={'INTERFACE': '接口'})
+                interface_column = '接口'
+
+            result['df'] = df
+
             device = next((d for d in self.nornir_mgr.nr.inventory.hosts.values() if d.name == device_name), None)
             if not device:
                 continue
 
-            # 计算每种速率的接口总数和UP数量
+            interface_field = '接口' if '接口' in df.columns else interface_column
             row_data = {'设备名称': device_name}
             for speed in SPEED_ORDER:
-                # 从接口名称中提取速率信息
-                speed_df = df[df['接口'].apply(lambda x: get_interface_speed(x) == speed)]
+                # 从接口数据中筛选对应速率信息
+                speed_df = df[df[interface_field].apply(lambda x: get_interface_speed(x) == speed)]
                 total = len(speed_df)
-                
-                # 根据设备类型判断接口状态
-                if device.platform == "hp_comware":
-                    up_count = len(speed_df[speed_df['链路状态'].str.lower() == 'up'])
+
+                status_column = None
+                if device.platform == "hp_comware" and '链路状态' in speed_df.columns:
+                    status_column = '链路状态'
+                elif '物理状态' in speed_df.columns:
+                    status_column = '物理状态'
+                elif 'PHY_STATUS' in speed_df.columns:
+                    status_column = 'PHY_STATUS'
+
+                if status_column:
+                    up_count = speed_df[status_column].astype(str).str.lower().eq('up').sum()
                 else:
-                    up_count = len(speed_df[speed_df['物理状态'].str.lower() == 'up'])
-                
+                    up_count = 0
+
                 row_data[speed] = f"{up_count}/{total}" if total > 0 else "0/0"
-                
-                # 累加总计
+
                 total_up[speed] += up_count
                 total_count[speed] += total
-            
+
             summary_data.append(row_data)
-        
-        # 创建汇总DataFrame
+
         if not summary_data:
             return pd.DataFrame(columns=['设备名称'] + SPEED_ORDER)
-            
+
         summary_df = pd.DataFrame(summary_data)
         summary_df = summary_df.reindex(columns=['设备名称'] + SPEED_ORDER)
-        
-        # 添加合计行
+
         summary_df.loc['合计'] = ['合计'] + [f"{total_up[speed]}/{total_count[speed]}" for speed in SPEED_ORDER]
-        
+
         return summary_df
 
     def query_interface(self, task: Task) -> Result:

@@ -23,6 +23,7 @@ INTERFACE_SPEED_MAPPING = {
     'FortyGigE': '40G',
     '40GE': '40G',
     'FGE': '40G',
+    'HGE': '100G',
     'HundredGigE': '100G',
     '100GE': '100G',
     'TwoHundredGigE': '200G',

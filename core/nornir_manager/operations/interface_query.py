@@ -22,6 +22,7 @@ INTERFACE_SPEED_MAPPING = {
     '25GE': '25G',
     'FortyGigE': '40G',
     '40GE': '40G',
+    'FGE': '40G',
     'HundredGigE': '100G',
     '100GE': '100G',
     'TwoHundredGigE': '200G',
@@ -37,8 +38,11 @@ SPEED_ORDER = ['1G', '10G', '25G', '40G', '100G', '200G', '400G']
 # 辅助函数
 def get_interface_speed(interface_name: str) -> str:
     """获取接口速率"""
+    if not isinstance(interface_name, str):
+        return 'unknown'
+    interface_name_upper = interface_name.upper()
     for pattern, speed in INTERFACE_SPEED_MAPPING.items():
-        if pattern in interface_name:
+        if pattern.upper() in interface_name_upper:
             return speed
     return 'unknown'
 
@@ -149,7 +153,9 @@ class InterfaceQuery(BaseOperation):
                 df = pd.DataFrame([result.result])
                 
             df.columns = df.columns.str.upper()
-            
+            # 去重：优先保留桥接模式中的同名接口记录
+            if 'INTERFACE' in df.columns:
+                df = df.drop_duplicates(subset=['INTERFACE'], keep='last')
             # 对DataFrame按接口名称自然排序
             df['INTERFACE'] = pd.Categorical(
                 df['INTERFACE'],

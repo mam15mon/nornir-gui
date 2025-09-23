@@ -1,29 +1,46 @@
 Value INTERFACE (\S+)
 Value LINK (\S+)
 Value SPEED (\S+)
+Value PROTOCOL (\S+)
+Value PRIMARY_IP (\S+)
 Value DUPLEX (\S+)
 Value TYPE (\S+)
-Value PVID (\d+)
+Value PVID (\d*)
 Value DESCRIPTION (.*)
 
 Start
+  ^Brief information on interfaces in route mode:\s*$$ -> Route_Mode
   ^Brief information on interfaces in bridge mode:\s*$$ -> Bridge_Mode
+  ^\s*$$ -> Start
+  ^. -> Start
+
+Route_Mode
+  ^Link:\s+ADM\s+-\s+administratively\s+down;\s+Stby\s+-\s+standby\s*$$ -> Route_Mode
+  ^Protocol:\s+\(s\)\s+-\s+spoofing\s*$$ -> Route_Mode
+  ^Interface\s+Link\s+Protocol\s+Primary\s+IP\s+Description\s*$$ -> Route_Table
+  ^Brief information on interfaces in bridge mode:\s*$$ -> Bridge_Mode
+  ^\s*$$ -> Route_Mode
+  ^. -> Route_Mode
+
+Route_Table
+  ^(?:InLoop|LoopBack|NULL|REG|Vlan|Tunnel|Dialer|RAGG|BAGG|Bridge-Aggregation|Route-Aggregation)\S*\s+.*$$ -> Route_Table
+  ^${INTERFACE}\s+${LINK}\s+${PROTOCOL}\s+${PRIMARY_IP}(?:\s+${DESCRIPTION})?$$ -> Record
+  ^Brief information on interfaces in bridge mode:\s*$$ -> Bridge_Mode
+  ^\s*$$ -> Route_Mode
+  ^. -> Route_Table
 
 Bridge_Mode
-  # 跳过说明行（这部分保持不变）
   ^Link:\s+ADM\s+-\s+administratively\s+down;\s+Stby\s+-\s+standby\s*$$ -> Bridge_Mode
   ^Speed:\s+\(a\)\s+-\s+auto\s*$$ -> Bridge_Mode
   ^Duplex:\s+\(a\)/A\s+-\s+auto;\s+H\s+-\s+half;\s+F\s+-\s+full\s*$$ -> Bridge_Mode
   ^Type:\s+A\s+-\s+access;\s+T\s+-\s+trunk;\s+H\s+-\s+hybrid\s*$$ -> Bridge_Mode
-  # 匹配表头
   ^Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\s+Description\s*$$ -> Bridge_Table
   ^\s*$$ -> Bridge_Mode
-  ^. -> Error
+  ^. -> Bridge_Mode
 
 Bridge_Table
-  # 忽略非物理接口（修改正则以更好地匹配）
-  ^(?:BAGG|RAGG)\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\d+(?:\s+.*)?$$ -> Bridge_Table
-  # 匹配物理接口（修改以处理可选的Description）
+  ^(?:BAGG|RAGG)\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\d*(?:\s+.*)?$$ -> Bridge_Table
   ^${INTERFACE}\s+${LINK}\s+${SPEED}\s+${DUPLEX}\s+${TYPE}\s+${PVID}(?:\s+${DESCRIPTION})?$$ -> Record
-  ^\s*$$ -> Bridge_Table
+  ^\s*$$ -> Bridge_Mode
   ^. -> Bridge_Table
+

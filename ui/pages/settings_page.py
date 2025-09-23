@@ -510,24 +510,25 @@ class SettingsPage(QWidget):
             config_manager = self.db.get_config_manager()
             if config_manager:
                 # 保存代理设置
-                config_manager.set_proxy_settings(
-                    enabled=self.enable_proxy.isChecked(),
-                    host=self.proxy_host.text().strip() if self.enable_proxy.isChecked() else '',
-                    port=self.proxy_port.value() if self.enable_proxy.isChecked() else 8080
-                )
+                with config_manager.batch_update():
+                    config_manager.set_proxy_settings(
+                        enabled=self.enable_proxy.isChecked(),
+                        host=self.proxy_host.text().strip() if self.enable_proxy.isChecked() else '',
+                        port=self.proxy_port.value() if self.enable_proxy.isChecked() else 8080
+                    )
 
-                # 保存存档路径
-                config_manager.set_archive_base_path(base_path)
+                    # 保存归档路径
+                    config_manager.set_archive_base_path(base_path)
 
-                # 保存日志路径
-                config_manager.set_log_path(log_path)
+                    # 保存日志路径
+                    config_manager.set_log_path(log_path)
 
-                # 保存数据库路径
-                db_path = os.path.normpath(self.db_base_path.text().strip())
-                config_manager.set_database_path(db_path)
+                    # 保存数据库路径
+                    db_path = os.path.normpath(self.db_base_path.text().strip())
+                    config_manager.set_database_path(db_path)
 
-                # 保存日志级别
-                config_manager.set_log_level(self.file_log_combo.currentText())
+                    # 更新日志级别
+                    config_manager.set_log_level(self.file_log_combo.currentText())
             else:
                 QMessageBox.warning(self, "警告", "配置管理器不可用，设置可能无法正确保存")
 

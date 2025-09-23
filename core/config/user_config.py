@@ -9,6 +9,7 @@ import logging
 import configparser
 from pathlib import Path
 from typing import Dict, Any, Optional
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,9 @@ class UserConfigManager:
         self._config = configparser.ConfigParser()
         self._ensure_config_dir()
         self._load_config()
+
+        self._batch_depth = 0
+        self._pending_save = False
 
     def _get_default_log_path(self) -> str:
         """获取默认日志目录路径"""
@@ -191,12 +195,20 @@ class UserConfigManager:
     
     def _save_config(self):
         """保存配置文件"""
+        if self._batch_depth > 0:
+            self._pending_save = True
+            return
+
+        self._write_config_to_disk()
+
+    def _write_config_to_disk(self):
+        """实际写入配置到磁盘"""
         try:
             # 检查目录权限
             if not os.access(self._config_dir, os.W_OK):
                 raise PermissionError(f"没有写入配置目录的权限: {self._config_dir}")
 
-            # 创建临时文件，先写入临时文件再重命名（原子操作）
+            # 创建临时文件，先写入临时文件，验证成功后再替换原始文件
             temp_file = self._config_file.with_suffix('.tmp')
 
             try:
@@ -207,10 +219,11 @@ class UserConfigManager:
                 temp_config = configparser.ConfigParser()
                 temp_config.read(temp_file, encoding='utf-8')
 
-                # 如果验证通过，重命名临时文件
+                # 验证通过后替换原始文件
                 if temp_file.exists():
                     temp_file.replace(self._config_file)
                     logger.info(f"配置文件已保存: {self._config_file}")
+                    self._pending_save = False
 
             except Exception as e:
                 # 清理临时文件
@@ -230,7 +243,17 @@ class UserConfigManager:
         except Exception as e:
             logger.error(f"保存配置文件失败: {e}")
             raise
-    
+    @contextmanager
+    def batch_update(self):
+        """批量更新配置，统一落盘"""
+        self._batch_depth += 1
+        try:
+            yield
+        finally:
+            self._batch_depth -= 1
+            if self._batch_depth == 0 and self._pending_save:
+                self._write_config_to_disk()
+
     def get_config_file_path(self) -> str:
         """获取配置文件路径"""
         return str(self._config_file)

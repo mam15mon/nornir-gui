@@ -6,6 +6,7 @@
 import os
 import logging
 from typing import Dict, Any, Optional
+from contextlib import contextmanager
 from .user_config import UserConfigManager
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,15 @@ class ConfigManager:
         self.migrator = ConfigMigrator(self.user_config)
         self._db_fallback = None
     
+    @contextmanager
+    def batch_update(self):
+        """批量更新配置的上下文"""
+        if hasattr(self.user_config, "batch_update"):
+            with self.user_config.batch_update():
+                yield
+        else:
+            yield
+
     def set_database_fallback(self, db_instance):
         """设置数据库回退实例"""
         self._db_fallback = db_instance

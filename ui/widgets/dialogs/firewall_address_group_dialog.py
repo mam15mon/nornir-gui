@@ -197,11 +197,11 @@ class FirewallAddressGroupDialog(QDialog):
             self, 
             f"确认{operation_text}操作", 
             confirm_msg,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             # 发送信号
             self.operation_requested.emit(operation_type, ip_addresses, group_name)
             self.accept()

@@ -338,11 +338,11 @@ class SettingsPage(QWidget):
             self,
             "确认重置",
             "确定要重置所有配置为默认值吗？\n这将清除所有自定义设置。",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 config_manager = self.db.get_config_manager()
                 if config_manager:
@@ -393,11 +393,11 @@ class SettingsPage(QWidget):
                     self,
                     "确认恢复",
                     "确定要从备份文件恢复配置吗？\n这将覆盖当前的所有设置。",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
                 )
 
-                if reply == QMessageBox.Yes:
+                if reply == QMessageBox.StandardButton.Yes:
                     config_manager = self.db.get_config_manager()
                     if config_manager:
                         config_manager.restore_config(backup_path)
@@ -783,10 +783,10 @@ class SettingsPage(QWidget):
                 self,
                 "确认覆盖",
                 f"数据库 {new_name} 已存在，是否覆盖？",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
 
-            if reply != QMessageBox.Yes:
+            if reply != QMessageBox.StandardButton.Yes:
                 return
 
         try:

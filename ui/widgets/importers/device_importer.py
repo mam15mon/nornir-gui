@@ -94,11 +94,11 @@ class DeviceImporter:
                     None, 
                     "发现重复设备名称", 
                     error_msg + "\n\n是否要自动添加后缀修复重复名称？\n(例：重复名称会变为name-1, name-2等)",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
                 )
                 
-                if reply == QMessageBox.Yes:
+                if reply == QMessageBox.StandardButton.Yes:
                     # 自动修复重复名称
                     logging.info("用户选择自动修复重复设备名称")
                     for name, rows in duplicate_details.items():
@@ -174,18 +174,24 @@ class DeviceImporter:
             update_mode = False
             if existing_names:
                 logging.debug(f"已存在的设备名称列表: {existing_names}")
-                reply = QMessageBox.question(
-                    None, 
-                    "设备名称已存在", 
-                    f"发现{len(existing_names)}个设备名称已存在于数据库中。\n\n您希望如何处理？",
-                    "更新现有设备|仅添加新设备|取消导入",
-                    0  # 默认选择更新
-                )
+                # 使用自定义对话框来提供三个选项
+                msg_box = QMessageBox()
+                msg_box.setWindowTitle("设备名称已存在")
+                msg_box.setText(f"发现{len(existing_names)}个设备名称已存在于数据库中。\n\n您希望如何处理？")
+                msg_box.setIcon(QMessageBox.Icon.Question)
                 
-                if reply == 2:  # 取消导入
+                update_btn = msg_box.addButton("更新现有设备", QMessageBox.ButtonRole.AcceptRole)
+                add_new_btn = msg_box.addButton("仅添加新设备", QMessageBox.ButtonRole.ActionRole)
+                cancel_btn = msg_box.addButton("取消导入", QMessageBox.ButtonRole.RejectRole)
+                msg_box.setDefaultButton(update_btn)
+                
+                msg_box.exec()
+                clicked_button = msg_box.clickedButton()
+                
+                if clicked_button == cancel_btn:
                     logging.info("用户取消了导入操作")
                     return False, 0
-                update_mode = (reply == 0)  # 选择更新
+                update_mode = (clicked_button == update_btn)
                 logging.info(f"用户选择{'更新现有设备' if update_mode else '仅添加新设备'}")
                 
                 # 设置更新模式标记

@@ -58,11 +58,11 @@ class DeviceManager(QObject):
             parent,
             "确认批量删除",
             f"确定要删除选中的 {len(device_names)} 个设备吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 # 使用优化的批量删除
                 success_count = self.db.batch_delete_hosts(device_names)
@@ -211,6 +211,9 @@ class DeviceManager(QObject):
         logger.info(f"开始批量处理 {len(devices)} 个设备")
         error_messages = []
         valid_devices = []
+        
+        # 如果parent不是QWidget（例如是ImportContext），则使用None作为消息框的父窗口
+        msg_parent = None if (parent and hasattr(parent, 'is_update_mode')) else parent
 
         # 检查重复名称
         name_counts = {}
@@ -245,7 +248,7 @@ class DeviceManager(QObject):
 
             error_msg = f"导入数据中存在重复的设备名称:\n" + "\n".join(detail_msg)
             logger.error(error_msg)
-            QMessageBox.warning(parent, "数据错误", error_msg)
+            QMessageBox.warning(msg_parent, "数据错误", error_msg)
             return 0, 0
 
         # 验证数据
@@ -268,7 +271,7 @@ class DeviceManager(QObject):
         if not valid_devices and error_messages:
             message = "数据验证失败，无法导入设备:\n" + "\n".join(error_messages)
             logger.error(message)
-            QMessageBox.warning(parent, "验证失败", message)
+            QMessageBox.warning(msg_parent, "验证失败", message)
             return 0, 0
 
         # 批量处理有效的设备
@@ -282,9 +285,9 @@ class DeviceManager(QObject):
                 message += "\n\n验证错误:\n" + "\n".join(error_messages)
 
             if error_messages:
-                QMessageBox.warning(parent, "完成", message)
+                QMessageBox.warning(msg_parent, "完成", message)
             else:
-                QMessageBox.information(parent, "完成", message)
+                QMessageBox.information(msg_parent, "完成", message)
 
             # 发送更新信号
             if success_count > 0 or update_count > 0:
@@ -296,5 +299,5 @@ class DeviceManager(QObject):
         except Exception as e:
             error_msg = f"批量处理设备失败: {str(e)}"
             logger.error(error_msg)
-            QMessageBox.critical(parent, "数据库错误", error_msg)
+            QMessageBox.critical(msg_parent, "数据库错误", error_msg)
             return 0, 0
